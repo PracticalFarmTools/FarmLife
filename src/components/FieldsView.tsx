@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { CROPS } from '../data/crops';
 import { FERTILIZERS, DISEASES } from '../data/agronomy';
+import { SEED_CATALOG } from '../data/seeds';
 import { NestedTooltip } from './NestedTooltip';
 import {
   Sprout,
@@ -13,6 +14,9 @@ import {
   ShieldAlert,
   Truck,
   AlertTriangle,
+  ArrowRight,
+  ArrowLeft,
+  CheckCircle2,
 } from 'lucide-react';
 import type { DiseaseId, FertilizerType } from '../types/game';
 
@@ -36,6 +40,10 @@ export const FieldsView: React.FC = () => {
   } = useGameStore();
 
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [plantingStep, setPlantingStep] = useState<1 | 2 | 3>(1);
+  const [wizardCropId, setWizardCropId] = useState<string | null>(null);
+  const [wizardSeedId, setWizardSeedId] = useState<string | null>(null);
+
   const [fertilizerModalFieldId, setFertilizerModalFieldId] = useState<string | null>(null);
   const [diseaseModalFieldId, setDiseaseModalFieldId] = useState<string | null>(null);
 
@@ -43,22 +51,30 @@ export const FieldsView: React.FC = () => {
   const activeFertilizerField = fields.find((f) => f.id === fertilizerModalFieldId);
   const activeDiseaseField = fields.find((f) => f.id === diseaseModalFieldId);
 
-  const handlePlantSubmit = (cropId: string) => {
-    if (!selectedFieldId) return;
-    const success = plantCrop(selectedFieldId, cropId);
-    if (success) {
+  const handleOpenPlantWizard = (fieldId: string) => {
+    setSelectedFieldId(fieldId);
+    setPlantingStep(1);
+    setWizardCropId(null);
+    setWizardSeedId(null);
+  };
+
+  const handleExecutePlanting = () => {
+    if (!selectedFieldId || !wizardCropId) return;
+    const ok = plantCrop(selectedFieldId, wizardCropId);
+    if (ok) {
       setSelectedFieldId(null);
+      setPlantingStep(1);
     }
   };
 
   return (
     <div className="space-y-6">
       {/* Header & Agronomy Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-stone-900/80 border border-stone-800 p-6 rounded-2xl shadow-lg">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-stone-900 border border-stone-800 p-6 rounded-2xl shadow-lg">
         <div>
           <h2 className="text-2xl font-extrabold text-stone-100 flex items-center gap-2">
             <Sprout className="w-7 h-7 text-emerald-400" />
-            <span>Soil, Nutrients & Field Management</span>
+            <span>Soil, Nutrients & Field Operations</span>
           </h2>
           <p className="text-xs text-stone-400 mt-1">
             Monitor Soil NPK, test <NestedTooltip termKey="soil_ph">Soil pH</NestedTooltip> levels, apply fertilizers, and cure <NestedTooltip termKey="late_blight">Late Blight</NestedTooltip>.
@@ -264,11 +280,11 @@ export const FieldsView: React.FC = () => {
               <div className="space-y-2 pt-2">
                 {isEmpty && (
                   <button
-                    onClick={() => setSelectedFieldId(field.id)}
+                    onClick={() => handleOpenPlantWizard(field.id)}
                     className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-stone-950 font-bold text-xs transition shadow flex items-center justify-center gap-1.5"
                   >
                     <Sprout className="w-4 h-4" />
-                    <span>Plant Crop</span>
+                    <span>Launch Plant Wizard</span>
                   </button>
                 )}
 
@@ -328,7 +344,7 @@ export const FieldsView: React.FC = () => {
                     onClick={() => runSoilTest(field.id)}
                     className="py-1.5 px-2 rounded-lg bg-stone-950 hover:bg-stone-850 border border-stone-800 text-amber-300 font-semibold text-[11px] transition flex items-center justify-center gap-1"
                   >
-                    <FlaskConical className="w-3 h-3 text-amber-400" />
+                    <FlaskConical className="w-3.5 h-3.5 text-amber-400" />
                     <span>Lab Test ($150)</span>
                   </button>
                 </div>
@@ -338,18 +354,19 @@ export const FieldsView: React.FC = () => {
         })}
       </div>
 
-      {/* PLANT CROP MODAL */}
+      {/* STEP-BY-STEP PLANT ACTION WIZARD MODAL */}
       {selectedFieldId && activeModalField && (
-        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="max-w-2xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-6 overflow-hidden">
+            {/* Wizard Header & Stepper Progress */}
             <div className="flex items-center justify-between pb-4 border-b border-stone-800 mb-6">
               <div>
                 <h3 className="text-xl font-bold text-stone-100 flex items-center gap-2">
                   <Sprout className="w-6 h-6 text-emerald-400" />
-                  <span>Plant Seed on {activeModalField.name}</span>
+                  <span>Planting Wizard: {activeModalField.name}</span>
                 </h3>
-                <p className="text-xs text-stone-400">
-                  Plot Size: {activeModalField.acres} Acres | Soil pH: {activeModalField.soil.pH} | Available Cash: ${cash.toLocaleString()}
+                <p className="text-xs text-stone-400 mt-0.5">
+                  Step {plantingStep} of 3: {plantingStep === 1 ? 'Select Crop Type' : plantingStep === 2 ? 'Select Genetic Trait' : 'Review & Confirm'}
                 </p>
               </div>
               <button
@@ -360,69 +377,155 @@ export const FieldsView: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-1">
-              {CROPS.map((crop) => {
-                const totalCost = crop.seedCostPerAcre * activeModalField.acres;
-                const canAfford = cash >= totalCost;
-                const isIdealSeason = crop.idealSeasons.includes(season);
+            {/* Stepper Dots */}
+            <div className="flex items-center justify-center gap-8 mb-6">
+              <div className={`flex items-center gap-2 text-xs font-bold ${plantingStep >= 1 ? 'text-emerald-400' : 'text-stone-600'}`}>
+                <span className="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-600 flex items-center justify-center">1</span>
+                <span>Select Crop</span>
+              </div>
+              <div className={`flex items-center gap-2 text-xs font-bold ${plantingStep >= 2 ? 'text-emerald-400' : 'text-stone-600'}`}>
+                <span className="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-600 flex items-center justify-center">2</span>
+                <span>Seed Trait</span>
+              </div>
+              <div className={`flex items-center gap-2 text-xs font-bold ${plantingStep === 3 ? 'text-emerald-400' : 'text-stone-600'}`}>
+                <span className="w-6 h-6 rounded-full bg-emerald-950 border border-emerald-600 flex items-center justify-center">3</span>
+                <span>Confirm</span>
+              </div>
+            </div>
 
-                return (
-                  <div
-                    key={crop.id}
-                    className={`p-4 rounded-xl border transition-all flex flex-col justify-between ${
-                      canAfford
-                        ? 'bg-stone-950 border-stone-800 hover:border-emerald-500/60'
-                        : 'bg-stone-950/40 border-stone-900 opacity-60'
+            {/* STEP 1: SELECT CROP */}
+            {plantingStep === 1 && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-80 overflow-y-auto pr-1">
+                  {CROPS.map((crop) => {
+                    const isSelected = wizardCropId === crop.id;
+                    const totalCost = crop.seedCostPerAcre * activeModalField.acres;
+                    const isIdealSeason = crop.idealSeasons.includes(season);
+
+                    return (
+                      <div
+                        key={crop.id}
+                        onClick={() => setWizardCropId(crop.id)}
+                        className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-emerald-950/60 border-emerald-500 ring-2 ring-emerald-500/40'
+                            : 'bg-stone-950 border-stone-800 hover:border-stone-700'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-3xl">{crop.icon}</span>
+                            {isIdealSeason && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                Ideal Season ({season})
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-stone-100 text-sm">{crop.name}</h4>
+                          <p className="text-xs text-stone-400 mt-1 line-clamp-2">{crop.description}</p>
+                        </div>
+                        <div className="mt-3 text-xs font-mono font-bold text-emerald-400">
+                          ${totalCost.toLocaleString()} Seed Cost
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-stone-800">
+                  <button
+                    disabled={!wizardCropId}
+                    onClick={() => setPlantingStep(2)}
+                    className={`px-5 py-2.5 rounded-xl font-bold text-xs shadow transition flex items-center gap-2 ${
+                      wizardCropId ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-950' : 'bg-stone-800 text-stone-500 cursor-not-allowed'
                     }`}
                   >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-3xl">{crop.icon}</span>
-                        {isIdealSeason ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                            ★ Ideal Season ({season})
+                    <span>Next: Select Seed Trait</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2: SELECT SEED TRAIT */}
+            {plantingStep === 2 && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-h-80 overflow-y-auto pr-1">
+                  {SEED_CATALOG.filter((v) => !wizardCropId || v.cropId === wizardCropId).map((variety) => {
+                    const isSelected = wizardSeedId === variety.id;
+                    return (
+                      <div
+                        key={variety.id}
+                        onClick={() => setWizardSeedId(variety.id)}
+                        className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-amber-950/60 border-amber-500 ring-2 ring-amber-500/40'
+                            : 'bg-stone-950 border-stone-800 hover:border-stone-700'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-stone-900 border border-stone-800 text-amber-400 uppercase">
+                            {variety.traitType}
                           </span>
-                        ) : (
-                          <span className="text-[10px] font-mono text-stone-400">
-                            {crop.idealSeasons.join(', ')}
-                          </span>
-                        )}
-                      </div>
-
-                      <h4 className="font-bold text-stone-100 text-sm">{crop.name}</h4>
-                      <p className="text-xs text-stone-400 mt-1 line-clamp-2">{crop.description}</p>
-
-                      <div className="mt-3 space-y-1 text-xs font-mono text-stone-300">
-                        <div className="flex justify-between">
-                          <span className="text-stone-400">Days to Harvest:</span>
-                          <span>{crop.daysToMaturity} days</span>
+                          <h4 className="font-bold text-stone-100 text-sm mt-2">{variety.name}</h4>
+                          <p className="text-xs text-stone-400 mt-1">{variety.description}</p>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-stone-400">Est. Yield / Acre:</span>
-                          <span>{crop.expectedYieldPerAcre} units</span>
-                        </div>
-                        <div className="flex justify-between text-emerald-400 font-bold">
-                          <span>Total Seed Cost:</span>
-                          <span>${totalCost.toLocaleString()}</span>
+                        <div className="mt-3 text-xs font-mono font-bold text-amber-400">
+                          +${variety.techFeePerAcre}/acre Tech Fee
                         </div>
                       </div>
-                    </div>
+                    );
+                  })}
+                </div>
 
-                    <button
-                      onClick={() => handlePlantSubmit(crop.id)}
-                      disabled={!canAfford}
-                      className={`mt-4 w-full py-2 px-3 rounded-lg font-bold text-xs transition ${
-                        canAfford
-                          ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-950 shadow'
-                          : 'bg-stone-800 text-stone-500 cursor-not-allowed'
-                      }`}
-                    >
-                      {canAfford ? `Plant (${crop.name})` : 'Insufficient Cash'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                <div className="flex justify-between pt-4 border-t border-stone-800">
+                  <button
+                    onClick={() => setPlantingStep(1)}
+                    className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Back</span>
+                  </button>
+                  <button
+                    onClick={() => setPlantingStep(3)}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-stone-950 font-bold text-xs shadow transition flex items-center gap-2"
+                  >
+                    <span>Next: Review & Confirm</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3: CONFIRM & EXECUTE */}
+            {plantingStep === 3 && (
+              <div className="space-y-6">
+                <div className="p-6 bg-stone-950 rounded-xl border border-stone-800 text-center space-y-3">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
+                  <h4 className="font-extrabold text-stone-100 text-lg">Ready to Plant</h4>
+                  <p className="text-xs text-stone-400">
+                    Confirm planting on <strong>{activeModalField.name}</strong> ({activeModalField.acres} Acres).
+                  </p>
+                </div>
+
+                <div className="flex justify-between pt-4 border-t border-stone-800">
+                  <button
+                    onClick={() => setPlantingStep(2)}
+                    className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition flex items-center gap-1.5"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Back</span>
+                  </button>
+                  <button
+                    onClick={handleExecutePlanting}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-stone-950 font-extrabold text-sm shadow-xl transition flex items-center gap-2"
+                  >
+                    <Sprout className="w-5 h-5" />
+                    <span>Execute Planting</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
