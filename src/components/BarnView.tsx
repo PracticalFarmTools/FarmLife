@@ -43,7 +43,7 @@ export const BarnView: React.FC = () => {
 
         <button
           onClick={upgradeBarn}
-          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-stone-950 font-bold text-sm shadow-lg transition"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-stone-950 font-bold text-sm shadow-lg transition cursor-pointer shrink-0"
         >
           <PlusCircle className="w-4 h-4" />
           <span>Expand Capacity (+4,000 units) - $8,000</span>

@@ -72,10 +72,10 @@ export const BankView: React.FC = () => {
       </div>
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-2 p-1 bg-stone-900 rounded-xl border border-stone-800 w-fit">
+      <div className="w-full flex items-center gap-1.5 sm:gap-2 p-1 bg-stone-900 rounded-xl border border-stone-800 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveSubTab('loans')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'loans'
               ? 'bg-amber-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
@@ -86,7 +86,7 @@ export const BankView: React.FC = () => {
 
         <button
           onClick={() => setActiveSubTab('insurance')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'insurance'
               ? 'bg-amber-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
@@ -97,24 +97,24 @@ export const BankView: React.FC = () => {
 
         <button
           onClick={() => setActiveSubTab('hedging')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'hedging'
               ? 'bg-amber-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
           }`}
         >
-          📈 Commodity Futures Hedging ({futuresContracts.length})
+          📈 Commodity Futures ({futuresContracts.length})
         </button>
 
         <button
           onClick={() => setActiveSubTab('stresstest')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'stresstest'
               ? 'bg-amber-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
           }`}
         >
-          🧮 Cash Flow Stress Test
+          🧮 Stress Test
         </button>
       </div>
 

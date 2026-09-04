@@ -101,7 +101,7 @@ export const SeedBrokerView: React.FC = () => {
             <button
               onClick={buildRndGreenhouse}
               disabled={cash < 50000}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs shadow transition whitespace-nowrap ${
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs shadow transition text-center shrink-0 cursor-pointer ${
                 cash >= 50000 ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-950' : 'bg-stone-800 text-stone-500 cursor-not-allowed'
               }`}
             >
@@ -136,11 +136,11 @@ export const SeedBrokerView: React.FC = () => {
             </div>
 
             {plantGeneticistHired && !geneticRnd.isBreedingActive && (
-              <div className="flex items-center gap-3 bg-stone-950 p-3 rounded-xl border border-stone-800">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-stone-950 p-3 rounded-xl border border-stone-800">
                 <span className="text-xs text-stone-300 font-bold whitespace-nowrap">Start 180-Day Breeding Project:</span>
                 <select
                   onChange={(e) => startBreedingProgram(e.target.value)}
-                  className="p-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-200 text-xs font-bold"
+                  className="w-full sm:w-auto p-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-200 text-xs font-bold"
                 >
                   <option value="">Select Target Crop...</option>
                   {CROPS.map((c) => (
@@ -156,19 +156,19 @@ export const SeedBrokerView: React.FC = () => {
       </div>
 
       {/* Seed Catalog Trait Matrix */}
-      <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h3 className="text-lg font-bold text-stone-100 flex items-center gap-2">
             <Dna className="w-5 h-5 text-purple-400" />
             <span>Seed Broker Catalog & Trait Matrix</span>
           </h3>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             {/* Filter by Crop */}
             <select
               value={selectedCropFilter}
               onChange={(e) => setSelectedCropFilter(e.target.value)}
-              className="p-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-200 text-xs font-bold"
+              className="w-full sm:w-auto p-2 rounded-xl bg-stone-950 border border-stone-800 text-stone-200 text-xs font-bold"
             >
               <option value="all">All Crops</option>
               {CROPS.map((c) => (
@@ -182,7 +182,7 @@ export const SeedBrokerView: React.FC = () => {
             <select
               value={selectedFieldForPurchase}
               onChange={(e) => setSelectedFieldForPurchase(e.target.value)}
-              className="p-2 rounded-xl bg-stone-950 border border-stone-800 text-emerald-400 text-xs font-bold font-mono"
+              className="w-full sm:w-auto p-2 rounded-xl bg-stone-950 border border-stone-800 text-emerald-400 text-xs font-bold font-mono"
             >
               {fields.map((f) => (
                 <option key={f.id} value={f.id}>

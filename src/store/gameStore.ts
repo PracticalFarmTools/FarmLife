@@ -49,7 +49,7 @@ interface GameState {
   netWorth: number;
   gameSpeed: GameSpeed;
   gameStarted: boolean;
-  activeTab: 'desk' | 'fields' | 'market' | 'barn' | 'garage' | 'roster' | 'bank' | 'seeds' | 'ledger';
+  activeTab: 'desk' | 'fields' | 'market' | 'barn' | 'garage' | 'roster' | 'bank' | 'seeds' | 'ledger' | 'endless';
 
   // Scenario & Campaign Mode
   selectedScenario: ScenarioId;
@@ -102,7 +102,7 @@ interface GameState {
   selectRegion: (regionId: string) => void;
   selectScenario: (scenarioId: ScenarioId) => void;
   setGameSpeed: (speed: GameSpeed) => void;
-  setActiveTab: (tab: 'desk' | 'fields' | 'market' | 'barn' | 'garage' | 'roster' | 'bank' | 'seeds' | 'ledger') => void;
+  setActiveTab: (tab: 'desk' | 'fields' | 'market' | 'barn' | 'garage' | 'roster' | 'bank' | 'seeds' | 'ledger' | 'endless') => void;
   nextDay: () => void;
 
   // Endless Mode Actions

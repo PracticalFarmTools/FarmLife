@@ -83,7 +83,7 @@ export const FieldsView: React.FC = () => {
 
         <button
           onClick={buyLand}
-          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-stone-950 font-bold text-sm shadow-lg transition"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-stone-950 font-bold text-sm shadow-lg transition cursor-pointer shrink-0"
         >
           <PlusCircle className="w-4 h-4" />
           <span>Buy 10 Acres (${selectedRegion?.baseLandCost ? (selectedRegion.baseLandCost * 10).toLocaleString() : 0})</span>
@@ -356,8 +356,8 @@ export const FieldsView: React.FC = () => {
 
       {/* STEP-BY-STEP PLANT ACTION WIZARD MODAL */}
       {selectedFieldId && activeModalField && (
-        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="max-w-2xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-6 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="max-w-2xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-hidden my-auto max-h-[94vh] flex flex-col">
             {/* Wizard Header & Stepper Progress */}
             <div className="flex items-center justify-between pb-4 border-b border-stone-800 mb-6">
               <div>
@@ -532,8 +532,8 @@ export const FieldsView: React.FC = () => {
 
       {/* FERTILIZER DELIVERY SYSTEM MODAL */}
       {fertilizerModalFieldId && activeFertilizerField && (
-        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-3xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-6 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="max-w-3xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-hidden my-auto max-h-[94vh] flex flex-col">
             <div className="flex items-center justify-between pb-4 border-b border-stone-800 mb-6">
               <div>
                 <h3 className="text-xl font-bold text-stone-100 flex items-center gap-2">
@@ -553,7 +553,7 @@ export const FieldsView: React.FC = () => {
             </div>
 
             {!activeFertilizerField.hasDripIrrigation && (
-              <div className="p-4 bg-stone-950 border border-stone-800 rounded-xl mb-6 flex items-center justify-between">
+              <div className="p-4 bg-stone-950 border border-stone-800 rounded-xl mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
                   <h4 className="font-bold text-stone-200 text-sm">Drip Irrigation System (CapEx)</h4>
                   <p className="text-xs text-stone-400">
@@ -562,7 +562,7 @@ export const FieldsView: React.FC = () => {
                 </div>
                 <button
                   onClick={() => installDripIrrigation(activeFertilizerField.id)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-stone-950 font-bold text-xs shadow transition whitespace-nowrap"
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-stone-950 font-bold text-xs shadow transition text-center shrink-0 cursor-pointer"
                 >
                   Install Drip (${(1200 * activeFertilizerField.acres).toLocaleString()})
                 </button>
@@ -646,8 +646,8 @@ export const FieldsView: React.FC = () => {
 
       {/* DISEASE TREATMENT & PREVENTATIVE SPRAY MODAL */}
       {diseaseModalFieldId && activeDiseaseField && (
-        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-3xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-6 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="max-w-3xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-hidden my-auto max-h-[94vh] flex flex-col">
             <div className="flex items-center justify-between pb-4 border-b border-stone-800 mb-6">
               <div>
                 <h3 className="text-xl font-bold text-stone-100 flex items-center gap-2">
@@ -678,7 +678,7 @@ export const FieldsView: React.FC = () => {
                     return (
                       <div
                         key={dId}
-                        className="p-4 bg-rose-950/60 border border-rose-800 rounded-xl flex items-center justify-between gap-4"
+                        className="p-4 bg-rose-950/60 border border-rose-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4"
                       >
                         <div>
                           <h5 className="font-bold text-stone-100 text-sm">{disease.name}</h5>
@@ -689,7 +689,7 @@ export const FieldsView: React.FC = () => {
                           onClick={() => {
                             applyDiseaseTreatment(activeDiseaseField.id, dId as DiseaseId);
                           }}
-                          className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow transition whitespace-nowrap"
+                          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow transition text-center shrink-0 cursor-pointer"
                         >
                           Cure (${cost.toLocaleString()})
                         </button>

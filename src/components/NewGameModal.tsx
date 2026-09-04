@@ -27,10 +27,10 @@ export const NewGameModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-      <div className="max-w-6xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 bg-stone-950/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="max-w-6xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl overflow-hidden my-4 sm:my-8">
         {/* Banner Header */}
-        <div className="bg-gradient-to-r from-emerald-900 via-stone-900 to-amber-950 p-8 text-center border-b border-stone-800 relative overflow-hidden">
+        <div className="bg-gradient-to-r from-emerald-900 via-stone-900 to-amber-950 p-5 sm:p-8 text-center border-b border-stone-800 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-12 opacity-10 pointer-events-none">
             <Sprout className="w-64 h-64 text-emerald-400" />
           </div>
@@ -40,18 +40,18 @@ export const NewGameModal: React.FC = () => {
             <span>AGRONOMICS SIMULATION ENGINE v2.0</span>
           </div>
 
-          <h1 className="text-4xl font-extrabold tracking-tight text-stone-100 sm:text-5xl">
+          <h1 className="text-3xl font-extrabold tracking-tight text-stone-100 sm:text-5xl">
             AGRONOMICS
           </h1>
-          <p className="mt-2 text-sm text-stone-300 max-w-2xl mx-auto">
+          <p className="mt-2 text-xs sm:text-sm text-stone-300 max-w-2xl mx-auto">
             Choose a core campaign scenario or free-play region to begin your enterprise.
           </p>
 
           {/* Mode Switcher */}
-          <div className="mt-6 flex justify-center gap-3">
+          <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row justify-center gap-2 sm:gap-3">
             <button
               onClick={() => setActiveTabMode('campaigns')}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs shadow transition flex items-center gap-2 ${
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs shadow transition flex items-center justify-center gap-2 cursor-pointer ${
                 activeTabMode === 'campaigns'
                   ? 'bg-amber-600 text-stone-950'
                   : 'bg-stone-800 text-stone-400 hover:text-stone-200'
@@ -63,7 +63,7 @@ export const NewGameModal: React.FC = () => {
 
             <button
               onClick={() => setActiveTabMode('sandbox')}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs shadow transition flex items-center gap-2 ${
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs shadow transition flex items-center justify-center gap-2 cursor-pointer ${
                 activeTabMode === 'sandbox'
                   ? 'bg-amber-600 text-stone-950'
                   : 'bg-stone-800 text-stone-400 hover:text-stone-200'
@@ -76,7 +76,7 @@ export const NewGameModal: React.FC = () => {
         </div>
 
         {/* Content Area */}
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           {activeTabMode === 'campaigns' ? (
             <div className="space-y-6">
               <h2 className="text-xl font-bold text-stone-200 flex items-center gap-2">

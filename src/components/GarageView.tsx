@@ -68,7 +68,7 @@ export const GarageView: React.FC = () => {
         {garageLevel < 3 && (
           <button
             onClick={upgradeGarage}
-            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-bold text-sm shadow-lg transition"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-bold text-sm shadow-lg transition cursor-pointer shrink-0"
           >
             <Building className="w-4 h-4" />
             <span>
@@ -79,10 +79,10 @@ export const GarageView: React.FC = () => {
       </div>
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-2 p-1 bg-stone-900 rounded-xl border border-stone-800 w-fit">
+      <div className="w-full flex items-center gap-1.5 sm:gap-2 p-1 bg-stone-900 rounded-xl border border-stone-800 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveSubTab('roster')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'roster'
               ? 'bg-amber-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
@@ -93,24 +93,24 @@ export const GarageView: React.FC = () => {
 
         <button
           onClick={() => setActiveSubTab('auction')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'auction'
               ? 'bg-amber-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
           }`}
         >
-          🏷️ Auction House Deals ({auctionDeals.length})
+          🏷️ Auction Deals ({auctionDeals.length})
         </button>
 
         <button
           onClick={() => setActiveSubTab('dealership')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'dealership'
               ? 'bg-amber-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
           }`}
         >
-          🏭 Equipment Dealership (New)
+          🏭 Dealership (New)
         </button>
       </div>
 

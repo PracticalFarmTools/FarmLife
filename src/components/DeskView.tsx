@@ -67,21 +67,21 @@ export const DeskView: React.FC = () => {
     <div className="space-y-8">
       {/* Morning Briefing / Field Distress Banner */}
       {distressedFields.length > 0 && (
-        <div className="bg-stone-900 border border-amber-500/80 rounded-2xl p-6 shadow-xl flex items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3.5 rounded-xl bg-amber-950 border border-amber-800 text-amber-400">
-              <AlertTriangle className="w-6 h-6" />
+        <div className="bg-stone-900 border border-amber-500/80 rounded-2xl p-4 sm:p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-6">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="p-2.5 sm:p-3.5 rounded-xl bg-amber-950 border border-amber-800 text-amber-400 shrink-0">
+              <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h3 className="font-extrabold text-stone-100 text-base">Agronomy Morning Briefing</h3>
-              <p className="text-xs text-stone-400 mt-1">
+              <h3 className="font-extrabold text-stone-100 text-sm sm:text-base">Agronomy Morning Briefing</h3>
+              <p className="text-xs text-stone-400 mt-0.5 sm:mt-1">
                 {distressedFields.length} field plot(s) require attention ({distressedFields.map((f) => f.name).join(', ')}).
               </p>
             </div>
           </div>
           <button
             onClick={() => setActiveTab('fields')}
-            className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow transition whitespace-nowrap"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow transition text-center shrink-0 cursor-pointer"
           >
             Inspect Fields
           </button>
@@ -89,55 +89,55 @@ export const DeskView: React.FC = () => {
       )}
 
       {/* Top Banner & High-Level Summary Indicators */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Cash Card */}
-        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-lg flex items-center justify-between">
+        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-lg flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Available Cash</p>
-            <h3 className="text-2xl font-extrabold text-emerald-400 font-mono mt-1">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono mt-1">
               ${cash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h3>
             <p className="text-xs text-stone-500 mt-1">Liquid Working Capital</p>
           </div>
-          <div className="p-3.5 bg-emerald-950 border border-emerald-800/80 rounded-xl">
-            <DollarSign className="w-6 h-6 text-emerald-400" />
+          <div className="p-3 sm:p-3.5 bg-emerald-950 border border-emerald-800/80 rounded-xl shrink-0">
+            <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
           </div>
         </div>
 
         {/* Net Worth Card */}
-        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-lg flex items-center justify-between">
+        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-lg flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Farm Valuation</p>
-            <h3 className="text-2xl font-extrabold text-amber-400 font-mono mt-1">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-amber-400 font-mono mt-1">
               ${netWorth.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </h3>
             <p className="text-xs text-stone-500 mt-1">Total Assets & Equity</p>
           </div>
-          <div className="p-3.5 bg-amber-950 border border-amber-800/80 rounded-xl">
-            <TrendingUp className="w-6 h-6 text-amber-400" />
+          <div className="p-3 sm:p-3.5 bg-amber-950 border border-amber-800/80 rounded-xl shrink-0">
+            <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" />
           </div>
         </div>
 
         {/* Barn Capacity Indicator */}
-        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-lg flex items-center justify-between">
+        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-lg flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Storage Capacity</p>
-            <h3 className="text-2xl font-extrabold text-blue-400 font-mono mt-1">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-blue-400 font-mono mt-1">
               {Math.round(totalStored)} / {barnCapacity.toLocaleString()}{' '}
               <span className="text-xs font-sans text-stone-400">units</span>
             </h3>
             <p className="text-xs text-stone-500 mt-1">{inventory.length} Crop Varieties Stored</p>
           </div>
-          <div className="p-3.5 bg-blue-950 border border-blue-800/80 rounded-xl">
-            <Warehouse className="w-6 h-6 text-blue-400" />
+          <div className="p-3 sm:p-3.5 bg-blue-950 border border-blue-800/80 rounded-xl shrink-0">
+            <Warehouse className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
           </div>
         </div>
 
         {/* Field Plots Summary Indicator */}
-        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-lg flex items-center justify-between">
+        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-lg flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Field Plots</p>
-            <h3 className="text-2xl font-extrabold text-stone-100 font-mono mt-1">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-stone-100 font-mono mt-1">
               {fields.length} <span className="text-xs font-sans text-stone-400">Plots</span>
             </h3>
             <div className="flex items-center gap-2 mt-1.5 text-xs">
@@ -145,8 +145,8 @@ export const DeskView: React.FC = () => {
               <span className="text-stone-400">{fields.filter((f) => getFieldStatusDot(f).label === 'Optimal').length} Optimal</span>
             </div>
           </div>
-          <div className="p-3.5 bg-emerald-950 border border-emerald-800/80 rounded-xl">
-            <Sprout className="w-6 h-6 text-emerald-400" />
+          <div className="p-3 sm:p-3.5 bg-emerald-950 border border-emerald-800/80 rounded-xl shrink-0">
+            <Sprout className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
           </div>
         </div>
       </div>
@@ -202,17 +202,17 @@ export const DeskView: React.FC = () => {
               <span>5-Day Weather Forecast</span>
             </h3>
 
-            <div className="grid grid-cols-5 gap-2 text-center">
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-center">
               {weatherForecast.map((f, idx) => (
                 <div
                   key={idx}
-                  className={`p-3 rounded-xl border flex flex-col items-center justify-between ${
+                  className={`p-1.5 sm:p-3 rounded-xl border flex flex-col items-center justify-between ${
                     idx === 0 ? 'bg-amber-950/60 border-amber-600' : 'bg-stone-950 border-stone-800'
                   }`}
                 >
-                  <span className="text-[10px] font-mono text-stone-400">Day {f.day}</span>
+                  <span className="text-[9px] sm:text-[10px] font-mono text-stone-400">D{f.day}</span>
                   <div className="my-1">{getWeatherIcon(f.weather)}</div>
-                  <span className="text-[10px] font-bold text-stone-300">{f.weather}</span>
+                  <span className="text-[9px] sm:text-[10px] font-bold text-stone-300 truncate max-w-full">{f.weather}</span>
                 </div>
               ))}
             </div>

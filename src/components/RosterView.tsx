@@ -74,7 +74,7 @@ export const RosterView: React.FC = () => {
         {/* Overtime Toggle Button */}
         <button
           onClick={toggleOvertimeMode}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-extrabold text-sm shadow-lg transition border ${
+          className={`w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-extrabold text-sm shadow-lg transition border cursor-pointer shrink-0 ${
             overtimeActive
               ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500 animate-pulse'
               : 'bg-stone-800 hover:bg-stone-700 text-amber-300 border-stone-700'
@@ -86,10 +86,10 @@ export const RosterView: React.FC = () => {
       </div>
 
       {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-2 p-1 bg-stone-900 rounded-xl border border-stone-800 w-fit">
+      <div className="w-full flex items-center gap-1.5 sm:gap-2 p-1 bg-stone-900 rounded-xl border border-stone-800 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveSubTab('seasonal')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'seasonal'
               ? 'bg-emerald-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
@@ -100,7 +100,7 @@ export const RosterView: React.FC = () => {
 
         <button
           onClick={() => setActiveSubTab('staff')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'staff'
               ? 'bg-emerald-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
@@ -111,13 +111,13 @@ export const RosterView: React.FC = () => {
 
         <button
           onClick={() => setActiveSubTab('housing')}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+          className={`px-3.5 sm:px-4 py-2 text-xs font-bold rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer ${
             activeSubTab === 'housing'
               ? 'bg-emerald-600 text-stone-950 shadow'
               : 'text-stone-400 hover:text-stone-200'
           }`}
         >
-          🏠 Worker Housing (Lvl {workerHousingLevel})
+          🏠 Housing (Lvl {workerHousingLevel})
         </button>
       </div>
 

@@ -46,10 +46,10 @@ export const MarketView: React.FC = () => {
         </div>
 
         {/* Sub-tab navigation */}
-        <div className="flex items-center gap-2 p-1 bg-stone-950 rounded-xl border border-stone-800">
+        <div className="w-full sm:w-auto grid grid-cols-2 sm:flex items-center gap-2 p-1 bg-stone-950 rounded-xl border border-stone-800">
           <button
             onClick={() => setActiveMarketTab('farmstand')}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+            className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition text-center cursor-pointer ${
               activeMarketTab === 'farmstand'
                 ? 'bg-amber-600 text-stone-950 shadow'
                 : 'text-stone-400 hover:text-stone-200'
@@ -60,7 +60,7 @@ export const MarketView: React.FC = () => {
 
           <button
             onClick={() => setActiveMarketTab('wholesale')}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition ${
+            className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition text-center cursor-pointer ${
               activeMarketTab === 'wholesale'
                 ? 'bg-amber-600 text-stone-950 shadow'
                 : 'text-stone-400 hover:text-stone-200'
@@ -75,7 +75,7 @@ export const MarketView: React.FC = () => {
       {activeMarketTab === 'farmstand' && (
         <div className="space-y-6">
           {/* Farmstand Upgrade Card */}
-          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-1 rounded bg-amber-950 text-amber-400 text-xs font-bold border border-amber-800">
@@ -93,7 +93,7 @@ export const MarketView: React.FC = () => {
 
             <button
               onClick={upgradeFarmstand}
-              className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-bold text-xs shadow-lg transition flex items-center gap-2 whitespace-nowrap"
+              className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-bold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
               <Sparkles className="w-4 h-4" />
               <span>Upgrade Stand (Level {farmstandLevel + 1}) - ${(5000 * farmstandLevel).toLocaleString()}</span>
@@ -240,9 +240,9 @@ export const MarketView: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <div className="text-right text-xs">
-                          <label className="block text-stone-400 font-mono mb-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-800">
+                        <div className="text-left sm:text-right text-xs">
+                          <label className="block text-stone-400 font-mono mb-1 text-[11px]">
                             Deliver Quantity (In Barn: {availableUnits})
                           </label>
                           <input
@@ -251,14 +251,14 @@ export const MarketView: React.FC = () => {
                             max={availableUnits}
                             value={qtyToDeliver}
                             onChange={(e) => handleQtyChange(contract.id, Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-28 px-3 py-1.5 rounded-lg bg-stone-900 border border-stone-800 text-stone-100 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                            className="w-full sm:w-28 px-3 py-2 rounded-lg bg-stone-900 border border-stone-800 text-stone-100 font-mono text-xs focus:outline-none focus:border-emerald-500"
                           />
                         </div>
 
                         <button
                           onClick={() => fulfillContract(contract.id, qtyToDeliver)}
                           disabled={availableUnits < 1}
-                          className={`px-4 py-2.5 rounded-xl font-bold text-xs transition shadow ${
+                          className={`w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs transition shadow text-center cursor-pointer ${
                             availableUnits >= 1
                               ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-950'
                               : 'bg-stone-800 text-stone-500 cursor-not-allowed'
