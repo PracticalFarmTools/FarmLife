@@ -373,6 +373,7 @@ export const useGameStore = create<GameState>()(
       activeDiseases: [],
       diseasePreventatives: { copperFungicide: false, sulfurOil: false },
       insuranceTier: 'none',
+      soilType: (i % 3 === 0 ? 'Silt Loam' : i % 3 === 1 ? 'Sandy Loam' : 'Clay Loam') as 'Silt Loam' | 'Sandy Loam' | 'Clay Loam',
     }));
 
     const initialOpLoan = scen.startingDebt > 0
@@ -442,6 +443,7 @@ export const useGameStore = create<GameState>()(
       activeDiseases: [],
       diseasePreventatives: { copperFungicide: false, sulfurOil: false },
       insuranceTier: 'none',
+      soilType: (i % 3 === 0 ? 'Silt Loam' : i % 3 === 1 ? 'Sandy Loam' : 'Clay Loam') as 'Silt Loam' | 'Sandy Loam' | 'Clay Loam',
     }));
 
     set({
@@ -585,6 +587,14 @@ export const useGameStore = create<GameState>()(
         case 'Frost':
           moistureDelta = -4;
           break;
+      }
+
+      // Soil texture composition influence
+      const soilType = f.soilType || 'Silt Loam';
+      if (soilType === 'Sandy Loam') {
+        moistureDelta = moistureDelta < 0 ? Math.round(moistureDelta * 1.25) : Math.round(moistureDelta * 0.85);
+      } else if (soilType === 'Clay Loam') {
+        moistureDelta = moistureDelta < 0 ? Math.round(moistureDelta * 0.75) : Math.round(moistureDelta * 1.2);
       }
 
       let newMoisture = Math.max(5, Math.min(100, f.moistureLevel + moistureDelta));
@@ -815,20 +825,36 @@ export const useGameStore = create<GameState>()(
     });
 
     // ==========================================
-    // 3. LABOR, FATIGUE & OVERTIME TICK
+    // 3. LABOR, FATIGUE, OVERTIME & WALKOUT TICK
     // ==========================================
-    const updatedWorkers: SeasonalWorker[] = state.seasonalWorkers.map((w) => {
+    const updatedWorkers: SeasonalWorker[] = [];
+    for (const w of state.seasonalWorkers) {
       const worker = { ...w };
       if (state.overtimeActive) {
         worker.fatigue = Math.min(100, worker.fatigue + 12);
-        worker.morale = Math.max(10, worker.morale - 6);
+        worker.morale = Math.max(0, worker.morale - 8);
       } else {
-        const housingMoraleBonus = state.workerHousingLevel * 2;
+        const housingMoraleBonus = state.workerHousingLevel * 3;
         worker.fatigue = Math.max(0, worker.fatigue - 10);
-        worker.morale = Math.min(100, worker.morale + 1 + housingMoraleBonus);
+        worker.morale = Math.min(100, worker.morale + 2 + housingMoraleBonus);
       }
-      return worker;
-    });
+
+      // Check walkout / strike consequence if pushed to exhaustion
+      if (state.overtimeActive && (worker.fatigue >= 90 || worker.morale <= 15) && Math.random() < 0.25) {
+        newNotifications.unshift({
+          id: `walkout-${Date.now()}-${worker.id}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          type: 'error' as const,
+          title: `🚨 Worker Walkout: ${worker.name}`,
+          message: `${worker.name} quit the farm due to extreme exhaustion (${worker.fatigue}% fatigue, ${worker.morale}% morale) under overtime! Deactivate Overtime Mode or upgrade Worker Housing.`,
+        });
+        continue; // Worker walked off and left the farm
+      }
+
+      updatedWorkers.push(worker);
+    }
 
     // ==========================================
     // 4. DAILY CASH BURN & PAYROLL DEDUCTION
@@ -1173,6 +1199,7 @@ export const useGameStore = create<GameState>()(
       activeDiseases: [],
       diseasePreventatives: { copperFungicide: false, sulfurOil: false },
       insuranceTier: 'none',
+      soilType: 'Clay Loam',
     };
 
     set({
@@ -1655,6 +1682,7 @@ export const useGameStore = create<GameState>()(
       activeDiseases: [],
       diseasePreventatives: { copperFungicide: false, sulfurOil: false },
       insuranceTier: 'none',
+      soilType: 'Silt Loam',
     };
 
     set({

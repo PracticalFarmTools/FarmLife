@@ -5,7 +5,9 @@ import {
   Dna,
   FlaskConical,
   Sparkles,
+  Award,
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import type { SeedTraitType } from '../types/game';
 
 export const SeedBrokerView: React.FC = () => {
@@ -29,6 +31,28 @@ export const SeedBrokerView: React.FC = () => {
   });
 
   const plantGeneticistHired = staff.find((s) => s.role === 'plant_geneticist')?.hired;
+
+  const triggerConfetti = (colors?: string[]) => {
+    try {
+      confetti({
+        particleCount: 55,
+        spread: 65,
+        origin: { y: 0.6 },
+        colors: colors || ['#a855f7', '#10b981', '#f59e0b', '#06b6d4'],
+      });
+    } catch {}
+  };
+
+  const handleBuySeed = (fieldId: string, varietyId: string) => {
+    buySeedVariety(fieldId, varietyId);
+    triggerConfetti(['#a855f7', '#10b981', '#fbbf24']);
+  };
+
+  const handleStartBreeding = (cropId: string) => {
+    if (!cropId) return;
+    startBreedingProgram(cropId);
+    triggerConfetti(['#38bdf8', '#818cf8', '#c084fc']);
+  };
 
   const getTraitBadgeColor = (trait: SeedTraitType) => {
     switch (trait) {
@@ -135,11 +159,41 @@ export const SeedBrokerView: React.FC = () => {
               </div>
             </div>
 
+            {geneticRnd.unlockedCustomSeeds.length > 0 && (
+              <div className="p-4 bg-gradient-to-r from-purple-950/70 via-stone-900 to-emerald-950/70 border border-purple-800/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-inner">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-900/40 border border-purple-700/50 text-purple-400">
+                    <Award className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-stone-100 flex items-center gap-2">
+                      <span>Proprietary Genetic Breakthroughs Registered</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-500/20 text-purple-300 font-mono font-bold">
+                        {geneticRnd.unlockedCustomSeeds.length} Strain{geneticRnd.unlockedCustomSeeds.length > 1 ? 's' : ''}
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-stone-300 mt-0.5">
+                      Proprietary genetics unlocked: <strong className="text-emerald-300 capitalize">{geneticRnd.unlockedCustomSeeds.join(', ')}</strong>. Zero corporate tech fees, +$250/day royalties & high natural resilience!
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => triggerConfetti()}
+                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-stone-950 font-bold text-xs shadow cursor-pointer whitespace-nowrap transition transform hover:scale-105"
+                >
+                  🎉 Celebrate Innovation
+                </button>
+              </div>
+            )}
+
             {plantGeneticistHired && !geneticRnd.isBreedingActive && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-stone-950 p-3 rounded-xl border border-stone-800">
                 <span className="text-xs text-stone-300 font-bold whitespace-nowrap">Start 180-Day Breeding Project:</span>
                 <select
-                  onChange={(e) => startBreedingProgram(e.target.value)}
+                  onChange={(e) => {
+                    handleStartBreeding(e.target.value);
+                    e.target.value = '';
+                  }}
                   className="w-full sm:w-auto p-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-200 text-xs font-bold"
                 >
                   <option value="">Select Target Crop...</option>
@@ -253,7 +307,7 @@ export const SeedBrokerView: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => buySeedVariety(selectedFieldForPurchase, variety.id)}
+                  onClick={() => handleBuySeed(selectedFieldForPurchase, variety.id)}
                   disabled={cash < totalCost}
                   className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs shadow transition ${
                     cash >= totalCost ? 'bg-purple-600 hover:bg-purple-500 text-stone-950' : 'bg-stone-800 text-stone-500 cursor-not-allowed'

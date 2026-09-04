@@ -1,12 +1,24 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { Receipt, Search, Filter, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import {
+  Receipt,
+  Search,
+  Filter,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
 
 export const LedgerView: React.FC = () => {
   const { ledger } = useGameStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [sortField, setSortField] = useState<'date' | 'category' | 'description' | 'amount'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const categories: string[] = [
     'ALL',
@@ -20,10 +32,46 @@ export const LedgerView: React.FC = () => {
     'Upgrades',
   ];
 
+  const handleSort = (field: 'date' | 'category' | 'description' | 'amount') => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const renderSortIcon = (field: 'date' | 'category' | 'description' | 'amount') => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-stone-600 group-hover:text-stone-400" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="w-3 h-3 text-amber-400" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-amber-400" />
+    );
+  };
+
   const filteredLedger = ledger.filter((entry) => {
     const matchesCategory = selectedCategory === 'ALL' || entry.category === selectedCategory;
     const matchesSearch = entry.description.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
+  });
+
+  const sortedAndFilteredLedger = [...filteredLedger].sort((a, b) => {
+    let comparison = 0;
+    if (sortField === 'date') {
+      const aTime = a.year * 365 + a.day;
+      const bTime = b.year * 365 + b.day;
+      comparison = aTime - bTime;
+    } else if (sortField === 'amount') {
+      comparison = a.amount - b.amount;
+    } else if (sortField === 'category') {
+      comparison = a.category.localeCompare(b.category);
+    } else if (sortField === 'description') {
+      comparison = a.description.localeCompare(b.description);
+    }
+    return sortDirection === 'asc' ? comparison : -comparison;
   });
 
   const totalRevenue = ledger.filter((e) => e.amount > 0).reduce((acc, e) => acc + e.amount, 0);
@@ -119,14 +167,46 @@ export const LedgerView: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-stone-950 border-b border-stone-800 text-[11px] font-bold text-stone-400 uppercase tracking-wider">
-                  <th className="py-3 px-6">Date</th>
-                  <th className="py-3 px-6">Category</th>
-                  <th className="py-3 px-6">Transaction Description</th>
-                  <th className="py-3 px-6 text-right">Amount</th>
+                  <th
+                    onClick={() => handleSort('date')}
+                    className="py-3 px-6 cursor-pointer select-none hover:text-stone-200 transition group"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Date</span>
+                      {renderSortIcon('date')}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('category')}
+                    className="py-3 px-6 cursor-pointer select-none hover:text-stone-200 transition group"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Category</span>
+                      {renderSortIcon('category')}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('description')}
+                    className="py-3 px-6 cursor-pointer select-none hover:text-stone-200 transition group"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Transaction Description</span>
+                      {renderSortIcon('description')}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort('amount')}
+                    className="py-3 px-6 text-right cursor-pointer select-none hover:text-stone-200 transition group"
+                  >
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span>Amount</span>
+                      {renderSortIcon('amount')}
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-800/60 text-xs">
-                {filteredLedger.map((entry) => (
+                {sortedAndFilteredLedger.map((entry) => (
                   <tr key={entry.id} className="hover:bg-stone-850/50 transition">
                     <td className="py-3.5 px-6 font-mono text-stone-400">
                       Y{entry.year} {entry.season} D{entry.day}

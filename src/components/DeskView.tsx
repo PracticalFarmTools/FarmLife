@@ -1,5 +1,6 @@
 import React from 'react';
 import { useGameStore } from '../store/gameStore';
+import { CROPS } from '../data/crops';
 import {
   DollarSign,
   TrendingUp,
@@ -16,6 +17,7 @@ import {
   Calendar,
   Sparkles,
   AlertTriangle,
+  Compass,
 } from 'lucide-react';
 import type { WeatherType } from '../types/game';
 
@@ -148,6 +150,97 @@ export const DeskView: React.FC = () => {
           <div className="p-3 sm:p-3.5 bg-emerald-950 border border-emerald-800/80 rounded-xl shrink-0">
             <Sprout className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
           </div>
+        </div>
+      </div>
+
+      {/* Aerial Farm Parcel Grid Map */}
+      <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-3">
+          <div>
+            <h3 className="text-lg font-extrabold text-stone-100 flex items-center gap-2">
+              <Compass className="w-5 h-5 text-emerald-400" />
+              <span>Aerial Farm Parcel Map</span>
+            </h3>
+            <p className="text-xs text-stone-400 mt-0.5">
+              Live tactical satellite overview of all active acreage, crops, and soil vitals.
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab('fields')}
+            className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+          >
+            <span>Manage All Fields</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+          {fields.map((field) => {
+            const crop = CROPS.find((c) => c.id === field.currentCropId);
+            const status = getFieldStatusDot(field);
+            const isReady = field.status === 'ready';
+            const isGrowing = field.status === 'growing';
+            const growthPct = crop ? Math.min(100, Math.round((field.growthDays / crop.daysToMaturity) * 100)) : 0;
+
+            return (
+              <div
+                key={field.id}
+                onClick={() => setActiveTab('fields')}
+                className={`group relative rounded-xl p-3 border transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[130px] overflow-hidden ${
+                  field.activeDiseases.length > 0
+                    ? 'bg-rose-950/40 border-rose-600/80 hover:border-rose-500'
+                    : isReady
+                    ? 'bg-amber-950/40 border-amber-500/80 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                    : isGrowing
+                    ? 'bg-stone-950 border-emerald-800/60 hover:border-emerald-500'
+                    : 'bg-stone-950/80 border-stone-800 hover:border-stone-700'
+                }`}
+              >
+                {/* Agricultural Furrow Background Grid Texture */}
+                <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(0deg,#15803d,#15803d_2px,transparent_2px,transparent_14px)] pointer-events-none" />
+
+                {/* Parcel Top Header */}
+                <div className="relative z-10 flex items-start justify-between gap-1">
+                  <div className="truncate">
+                    <span className="font-extrabold text-xs text-stone-200 block truncate">{field.name}</span>
+                    <span className="text-[10px] text-stone-400 font-mono">{field.acres} Ac • {field.soilType || 'Silt Loam'}</span>
+                  </div>
+                  <span className={`w-2.5 h-2.5 rounded-full ${status.color} ring-2 shrink-0 mt-0.5`} />
+                </div>
+
+                {/* Parcel Center Graphic */}
+                <div className="relative z-10 my-2 flex items-center justify-center text-center">
+                  {crop ? (
+                    <div className="space-y-0.5">
+                      <span className={`text-2xl block ${isReady ? 'animate-bounce' : ''}`}>{crop.icon}</span>
+                      <span className="text-[10px] font-bold text-stone-300 truncate max-w-[100px] block mx-auto">
+                        {crop.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-center py-1 opacity-40">
+                      <Sprout className="w-5 h-5 mx-auto text-stone-500 mb-0.5" />
+                      <span className="text-[9px] text-stone-500 uppercase tracking-wider font-mono">Fallow</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Parcel Footer Indicator */}
+                <div className="relative z-10 pt-1 border-t border-stone-800/80 flex items-center justify-between text-[10px] font-mono">
+                  <span className="text-blue-400 flex items-center gap-0.5">
+                    💧{field.moistureLevel}%
+                  </span>
+                  {isReady ? (
+                    <span className="font-extrabold text-amber-400 animate-pulse">READY</span>
+                  ) : isGrowing ? (
+                    <span className="font-bold text-emerald-400">{growthPct}%</span>
+                  ) : (
+                    <span className="text-stone-500">Empty</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -202,10 +202,15 @@ export const FieldsView: React.FC = () => {
                       <FlaskConical className="w-3.5 h-3.5 text-amber-400" />
                       <span>Soil Chemistry:</span>
                     </span>
-                    <span className="font-bold px-2 py-0.5 rounded bg-stone-900 border border-stone-800 text-amber-400">
-                      <NestedTooltip termKey="soil_ph">pH {field.soil.pH}</NestedTooltip>{' '}
-                      {field.soil.pH < 6.0 ? '(Acidic)' : field.soil.pH > 7.0 ? '(Alkaline)' : '(Neutral)'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-stone-900 border border-stone-800 text-stone-300 font-sans font-bold">
+                        {field.soilType || 'Silt Loam'}
+                      </span>
+                      <span className="font-bold px-2 py-0.5 rounded bg-stone-900 border border-stone-800 text-amber-400">
+                        <NestedTooltip termKey="soil_ph">pH {field.soil.pH}</NestedTooltip>{' '}
+                        {field.soil.pH < 6.0 ? '(Acidic)' : field.soil.pH > 7.0 ? '(Alkaline)' : '(Neutral)'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* NPK Gauges Grid */}

@@ -183,6 +183,7 @@ export interface Field {
   isCertifiedOrganic?: boolean;
   cropHistory?: string[];
   monoculturePenaltySeasons?: number;
+  soilType?: 'Sandy Loam' | 'Clay Loam' | 'Silt Loam';
 }
 
 export interface InventoryItem {

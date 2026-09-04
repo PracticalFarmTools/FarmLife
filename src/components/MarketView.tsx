@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import confetti from 'canvas-confetti';
 import { useGameStore } from '../store/gameStore';
 import { CROPS } from '../data/crops';
 import { PRICING_STRATEGIES } from '../data/pricingStrategies';
@@ -29,6 +30,20 @@ export const MarketView: React.FC = () => {
 
   const handleQtyChange = (id: string, val: number) => {
     setSellQuantities((prev) => ({ ...prev, [id]: val }));
+  };
+
+  const handleFulfillContract = (contractId: string, qty: number) => {
+    const ok = fulfillContract(contractId, qty);
+    if (ok) {
+      try {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.65 },
+          colors: ['#10b981', '#f59e0b', '#3b82f6'],
+        });
+      } catch {}
+    }
   };
 
   return (
@@ -256,7 +271,7 @@ export const MarketView: React.FC = () => {
                         </div>
 
                         <button
-                          onClick={() => fulfillContract(contract.id, qtyToDeliver)}
+                          onClick={() => handleFulfillContract(contract.id, qtyToDeliver)}
                           disabled={availableUnits < 1}
                           className={`w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs transition shadow text-center cursor-pointer ${
                             availableUnits >= 1
