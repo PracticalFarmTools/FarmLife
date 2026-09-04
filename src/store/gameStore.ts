@@ -409,13 +409,27 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   getDailyBurnRate: () => {
     const state = get();
-    const dailyWages = state.seasonalWorkers.reduce((a, b) => a + b.dailyWage, 0);
+    const dailyWages = state.seasonalWorkers.reduce(
+      (a, b) => a + (state.overtimeActive ? b.dailyWage * 1.5 : b.dailyWage),
+      0
+    );
     const dailyStaffSalaries = state.staff.filter((s) => s.hired).reduce((a, b) => a + b.salaryPerSeason / 90, 0);
     const dailyMortgages = state.mortgages.reduce((a, b) => a + b.dailyPayment, 0);
     const dailyColdStorageOpEx = state.storageFacility.hasColdStorage ? 150 : 0;
     const dailyAutonomousLicenses = state.fleet.filter((m) => m.isAutonomous).length * 100;
     const dailyLandMaint = 30 + state.fields.length * 15;
-    return Math.round(dailyWages + dailyStaffSalaries + dailyMortgages + dailyColdStorageOpEx + dailyAutonomousLicenses + dailyLandMaint);
+    const dailyLoanInterest = state.operatingLoan
+      ? (state.operatingLoan.principal * state.operatingLoan.interestRate) / 365
+      : 0;
+    return Math.round(
+      dailyWages +
+        dailyStaffSalaries +
+        dailyMortgages +
+        dailyColdStorageOpEx +
+        dailyAutonomousLicenses +
+        dailyLandMaint +
+        dailyLoanInterest
+    );
   },
 
   nextDay: () => {
@@ -434,7 +448,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Macro Climate Drift Engine (0.5% drought increase per year)
     let region = { ...state.selectedRegion };
     if (newDay === 1 && newYear > 1) {
-      region.weatherProbabilities.Drought = Math.min(0.60, Number((region.weatherProbabilities.Drought + 0.005).toFixed(3)));
+      region.weatherProbabilities.Drought = Math.min(
+        0.6,
+        Number((region.weatherProbabilities.Drought + 0.005).toFixed(3))
+      );
     }
 
     // Update 5-day Weather Forecast
@@ -458,14 +475,374 @@ export const useGameStore = create<GameState>((set, get) => ({
     const newNotifications: NotificationItem[] = [...state.notifications];
     const newLedger: LedgerEntry[] = [...state.ledger];
 
-    // R&D Genetic Breeding Progress
-    let rnd = { ...state.geneticRnd };
+    // ==========================================
+    // 1. FIELDS SIMULATION & AGRONOMIC HEARTBEAT
+    // ==========================================
+    const updatedFields: Field[] = state.fields.map((field) => {
+      const f: Field = {
+        ...field,
+        soil: { ...field.soil },
+        activeDiseases: [...field.activeDiseases],
+        diseasePreventatives: { ...field.diseasePreventatives },
+      };
+
+      // --- Soil Moisture Dynamics ---
+      let moistureDelta = 0;
+      switch (newWeather) {
+        case 'Rainy':
+          moistureDelta = 30;
+          break;
+        case 'Storm':
+          moistureDelta = 45;
+          break;
+        case 'Sunny':
+          moistureDelta = f.hasStrawMulch || f.hasDripIrrigation ? -5 : -10;
+          break;
+        case 'Drought':
+          moistureDelta = f.hasStrawMulch || f.hasDripIrrigation ? -8 : -18;
+          break;
+        case 'Frost':
+          moistureDelta = -4;
+          break;
+      }
+
+      let newMoisture = Math.max(5, Math.min(100, f.moistureLevel + moistureDelta));
+      if (f.hasDripIrrigation) {
+        newMoisture = Math.max(60, newMoisture); // Drip maintains baseline 60%
+      }
+      f.moistureLevel = newMoisture;
+      f.moistureHistory = [...f.moistureHistory.slice(-4), newMoisture];
+
+      // --- Surface Granular Fertilizer Integration ---
+      if (f.soil.surfaceGranular && (newWeather === 'Rainy' || newWeather === 'Storm' || f.hasDripIrrigation)) {
+        const gran = f.soil.surfaceGranular;
+        f.soil.nitrogen = Math.min(100, f.soil.nitrogen + gran.n);
+        f.soil.phosphorus = Math.min(100, f.soil.phosphorus + gran.p);
+        f.soil.potassium = Math.min(100, f.soil.potassium + gran.k);
+        f.soil.calcium = Math.min(100, f.soil.calcium + gran.ca);
+        f.soil.pH = Math.max(4.5, Math.min(8.5, Number((f.soil.pH + gran.ph).toFixed(1))));
+        f.soil.surfaceGranular = null;
+        newNotifications.unshift({
+          id: `fert-integrate-${Date.now()}-${f.id}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          type: 'success',
+          title: `Fertilizer Dissolved: ${f.name}`,
+          message: `Rain/Irrigation dissolved surface granular fertilizer into root soil!`,
+        });
+      }
+
+      // --- Crop Growth Advancement & Nutrient Consumption ---
+      if (f.status === 'growing' && f.currentCropId) {
+        const crop = CROPS.find((c) => c.id === f.currentCropId);
+        if (crop) {
+          // Growth speed multiplier based on stress/vitality
+          let growthMultiplier = 1.0;
+
+          // Soil moisture stress
+          if (newMoisture < 25) {
+            growthMultiplier *= 0.5; // Drought stunt
+          } else if (newMoisture > 88) {
+            growthMultiplier *= 0.7; // Waterlogging stunt
+          } else if (newMoisture >= 45 && newMoisture <= 75) {
+            growthMultiplier *= 1.1; // Optimal moisture bonus
+          }
+
+          const nDep = crop.nDepletionPerDay ?? 1.0;
+          const pDep = crop.pDepletionPerDay ?? 0.4;
+          const kDep = crop.kDepletionPerDay ?? 0.4;
+          const phMin = crop.optimalPhMin ?? crop.idealPHMin ?? 5.5;
+          const phMax = crop.optimalPhMax ?? crop.idealPHMax ?? 7.5;
+
+          // Nutrient stress
+          if (f.soil.nitrogen < 20 && nDep > 0) {
+            growthMultiplier *= 0.5; // Nitrogen deficiency
+          }
+          if (f.soil.pH < phMin || f.soil.pH > phMax) {
+            growthMultiplier *= 0.8; // pH lockout
+          }
+
+          // Active disease penalty
+          if (f.activeDiseases.length > 0) {
+            growthMultiplier *= 0.6;
+          }
+
+          // Overtime boost
+          if (state.overtimeActive) {
+            growthMultiplier *= 1.3;
+          }
+
+          // Advance growth days
+          f.growthDays = Number((f.growthDays + growthMultiplier).toFixed(1));
+
+          // Deplete Soil Nutrients daily per acre
+          f.soil.nitrogen = Math.max(0, Number((f.soil.nitrogen - nDep).toFixed(1)));
+          f.soil.phosphorus = Math.max(0, Number((f.soil.phosphorus - pDep).toFixed(1)));
+          f.soil.potassium = Math.max(0, Number((f.soil.potassium - kDep).toFixed(1)));
+
+          // Check Maturity
+          if (f.growthDays >= crop.daysToMaturity) {
+            f.status = 'ready';
+            newNotifications.unshift({
+              id: `harvest-ready-${Date.now()}-${f.id}`,
+              day: newDay,
+              season: newSeason,
+              year: newYear,
+              type: 'success',
+              title: `🌾 Harvest Ready: ${f.name}`,
+              message: `${crop.name} is fully mature! Harvest now to avoid post-maturity rot.`,
+            });
+          }
+
+          // --- Disease Outbreak Simulation ---
+          // Preventative wear: copper fungicide washes off after heavy rains
+          if (newWeather === 'Rainy' || newWeather === 'Storm') {
+            if (f.diseasePreventatives.copperFungicide) {
+              f.diseasePreventatives.copperFungicide = false;
+            }
+          }
+
+          // Check Late Blight
+          if (
+            (crop.id === 'crop_tomato_heirloom' || crop.id === 'crop_potato_russet') &&
+            newMoisture >= 85 &&
+            (newWeather === 'Rainy' || newWeather === 'Storm') &&
+            !f.activeDiseases.includes('disease_late_blight')
+          ) {
+            if (!field.diseasePreventatives.copperFungicide && Math.random() < 0.35) {
+              f.activeDiseases.push('disease_late_blight');
+              newNotifications.unshift({
+                id: `blight-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'error',
+                title: `⚠️ Blight Outbreak: ${f.name}`,
+                message: `Phytophthora Late Blight broke out on wet foliage! Yield is degrading 15%/day.`,
+              });
+            }
+          }
+
+          // Check Powdery Mildew
+          if (
+            (crop.id === 'crop_strawberries' || crop.id === 'crop_tomato_heirloom') &&
+            (newWeather === 'Drought' || (newMoisture <= 25 && newWeather === 'Sunny')) &&
+            !f.activeDiseases.includes('disease_powdery_mildew')
+          ) {
+            if (!field.diseasePreventatives.sulfurOil && Math.random() < 0.3) {
+              f.activeDiseases.push('disease_powdery_mildew');
+              newNotifications.unshift({
+                id: `mildew-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'warning',
+                title: `⚠️ Powdery Mildew: ${f.name}`,
+                message: `Powdery Mildew coating leaves in dry heat. Treat with Elemental Sulfur spray.`,
+              });
+            }
+          }
+
+          // Check Clubroot on Brassicas in acidic wet soil
+          if (
+            crop.category === 'Brassica' &&
+            f.soil.pH < 6.0 &&
+            newMoisture >= 70 &&
+            !f.activeDiseases.includes('disease_clubroot')
+          ) {
+            if (Math.random() < 0.3) {
+              f.activeDiseases.push('disease_clubroot');
+              newNotifications.unshift({
+                id: `clubroot-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'error',
+                title: `⚠️ Clubroot Outbreak: ${f.name}`,
+                message: `Clubroot fungus attacking root system due to acidic soil (pH < 6.0)! Apply Dolomitic Lime.`,
+              });
+            }
+          }
+
+          // Check Frost Kill
+          if (newWeather === 'Frost' && !crop.idealSeasons.includes('Winter')) {
+            if (crop.category === 'Specialty' || crop.category === 'Fruit') {
+              f.soilQuality = Math.max(30, f.soilQuality - 10);
+              newNotifications.unshift({
+                id: `frost-damage-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'warning',
+                title: `❄️ Frost Damage on ${f.name}`,
+                message: `Sudden frost singed tender foliage, reducing yield quality.`,
+              });
+            }
+          }
+        }
+      }
+
+      return f;
+    });
+
+    // ==========================================
+    // 2. FLEET & WORKSHOP REPAIRS
+    // ==========================================
+    const updatedFleet: MachineryItem[] = state.fleet.map((machine) => {
+      const m = { ...machine };
+      if (m.status === 'in_shop') {
+        const remaining = m.repairDaysRemaining - 1;
+        if (remaining <= 0) {
+          m.status = 'available';
+          m.condition = 100;
+          m.repairDaysRemaining = 0;
+          newNotifications.unshift({
+            id: `repair-done-${Date.now()}-${m.id}`,
+            day: newDay,
+            season: newSeason,
+            year: newYear,
+            type: 'success',
+            title: `🔧 Equipment Repaired: ${m.name}`,
+            message: `Workshop mechanics completed maintenance. Condition restored to 100%.`,
+          });
+        } else {
+          m.repairDaysRemaining = remaining;
+        }
+      }
+
+      m.warrantyDaysRemaining = Math.max(0, m.warrantyDaysRemaining - 1);
+
+      // Natural wear from active farm operations
+      if (m.status === 'available') {
+        m.condition = Math.max(10, Number((m.condition - 0.2).toFixed(1)));
+        if (m.condition < 25 && Math.random() < 0.1) {
+          m.status = 'broken_down';
+          newNotifications.unshift({
+            id: `breakdown-${Date.now()}-${m.id}`,
+            day: newDay,
+            season: newSeason,
+            year: newYear,
+            type: 'error',
+            title: `🚨 Breakdown: ${m.name}`,
+            message: `Equipment broke down in field due to critical wear! Dispatch for repair immediately.`,
+          });
+        }
+      }
+
+      return m;
+    });
+
+    // ==========================================
+    // 3. LABOR, FATIGUE & OVERTIME TICK
+    // ==========================================
+    const updatedWorkers: SeasonalWorker[] = state.seasonalWorkers.map((w) => {
+      const worker = { ...w };
+      if (state.overtimeActive) {
+        worker.fatigue = Math.min(100, worker.fatigue + 12);
+        worker.morale = Math.max(10, worker.morale - 6);
+      } else {
+        const housingMoraleBonus = state.workerHousingLevel * 2;
+        worker.fatigue = Math.max(0, worker.fatigue - 10);
+        worker.morale = Math.min(100, worker.morale + 1 + housingMoraleBonus);
+      }
+      return worker;
+    });
+
+    // ==========================================
+    // 4. DAILY CASH BURN & PAYROLL DEDUCTION
+    // ==========================================
+    const dailyWages = updatedWorkers.reduce(
+      (a, b) => a + (state.overtimeActive ? b.dailyWage * 1.5 : b.dailyWage),
+      0
+    );
+    const dailyStaffSalaries = state.staff.filter((s) => s.hired).reduce((a, b) => a + b.salaryPerSeason / 90, 0);
+    const dailyMortgages = state.mortgages.reduce((a, b) => a + b.dailyPayment, 0);
+    const dailyAutonomousLicenses = updatedFleet.filter((m) => m.isAutonomous).length * 100;
+    const dailyColdStorageOpEx = state.storageFacility.hasColdStorage ? 150 : 0;
+    const dailyLandMaint = 30 + updatedFields.length * 15;
+    const dailyLoanInterest = state.operatingLoan
+      ? (state.operatingLoan.principal * state.operatingLoan.interestRate) / 365
+      : 0;
+
+    const totalDailyOpEx = Math.round(
+      dailyWages +
+        dailyStaffSalaries +
+        dailyMortgages +
+        dailyAutonomousLicenses +
+        dailyColdStorageOpEx +
+        dailyLandMaint +
+        dailyLoanInterest
+    );
+
+    updatedCash -= totalDailyOpEx;
+
+    // Record daily burn in ledger
+    newLedger.unshift({
+      id: `daily-burn-${Date.now()}`,
+      day: newDay,
+      season: newSeason,
+      year: newYear,
+      description: `Daily Operational Burn (Wages $${Math.round(dailyWages)}, Staff $${Math.round(dailyStaffSalaries)}, Maint $${Math.round(dailyLandMaint)}, Power $${dailyColdStorageOpEx})`,
+      amount: -totalDailyOpEx,
+      category: 'Maintenance',
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
+    // Cash Deficit Warning
+    if (updatedCash < 0) {
+      newNotifications.unshift({
+        id: `overdraft-${Date.now()}`,
+        day: newDay,
+        season: newSeason,
+        year: newYear,
+        type: 'error',
+        title: `🚨 Account Overdraft! ($${Math.abs(Math.round(updatedCash)).toLocaleString()})`,
+        message: `Working capital depleted! Liquidate crops or take an operating credit line from the bank.`,
+      });
+    }
+
+    // ==========================================
+    // 5. OPERATING LOAN ROLLOVER ENFORCEMENT
+    // ==========================================
+    const opLoan = state.operatingLoan ? { ...state.operatingLoan } : null;
+    if (opLoan) {
+      // Loan due at end of Fall (Day 270)
+      if (newDay === 270 && !opLoan.isRollover) {
+        opLoan.isRollover = true;
+        opLoan.interestRate = 0.18; // Penalty rate 18%
+        opLoan.principal = Math.round(opLoan.principal * 1.1); // +10% penalty fee
+        newNotifications.unshift({
+          id: `loan-default-${Date.now()}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          type: 'error',
+          title: `⚠️ Bank Default: Operating Loan Rollover`,
+          message: `Operating loan was not repaid before Fall harvest ended. 18% penalty interest rate enforced!`,
+        });
+      }
+    }
+
+    // ==========================================
+    // 6. R&D BREEDING, COLD STORAGE & MARKET SALES
+    // ==========================================
+    const rnd = { ...state.geneticRnd };
     if (rnd.isBreedingActive) {
       rnd.breedingProgressDays += 1;
       if (rnd.breedingProgressDays >= 180) {
         rnd.isBreedingActive = false;
         rnd.unlockedCustomSeeds.push(rnd.targetCropId || 'corn');
         rnd.passiveRoyaltyIncome += 250;
+        newNotifications.unshift({
+          id: `rnd-success-${Date.now()}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          type: 'success',
+          title: `🧬 Genetic Breakthrough!`,
+          message: `180-day breeding program completed. Unlocked proprietary strain with +$250/day passive royalties!`,
+        });
       }
     }
 
@@ -484,13 +861,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     // Cold Storage Electricity & Outages
-    let facility = { ...state.storageFacility };
+    const facility = { ...state.storageFacility };
     if (facility.hasColdStorage) {
-      updatedCash -= 150;
-      if (newWeather === 'Storm' && Math.random() < 0.40) {
+      if (newWeather === 'Storm' && Math.random() < 0.4) {
         if (!facility.hasBackupGenerator) {
           facility.isPowerOutage = true;
           facility.coldStorageTemp = 65;
+          newNotifications.unshift({
+            id: `blackout-${Date.now()}`,
+            day: newDay,
+            season: newSeason,
+            year: newYear,
+            type: 'error',
+            title: `⚡ Cold Storage Blackout!`,
+            message: `Severe storm tripped substation. Cooler temperature spiked to 65°F! Install backup generator.`,
+          });
         } else {
           facility.isPowerOutage = false;
           facility.coldStorageTemp = 34;
@@ -505,51 +890,73 @@ export const useGameStore = create<GameState>((set, get) => ({
     let updatedInventory = [...state.inventory];
     let totalDailySalesRevenue = 0;
 
-    updatedInventory = updatedInventory.map((item) => {
-      const crop = CROPS.find((c) => c.id === item.cropId);
-      if (!crop || item.quantity <= 0) return item;
+    updatedInventory = updatedInventory
+      .map((item) => {
+        const crop = CROPS.find((c) => c.id === item.cropId);
+        if (!crop || item.quantity <= 0) return item;
 
-      const newDaysInStorage = item.daysInStorage + 1;
-      let currentQty = item.quantity;
+        const newDaysInStorage = item.daysInStorage + 1;
+        let currentQty = item.quantity;
 
-      if (newDaysInStorage > crop.spoilageDays) {
-        let baseSpoilageRate = crop.spoilageRatePerDay;
-        if (item.hasFieldHeat && !item.isHydrocooled) baseSpoilageRate *= 2.0;
-        if (facility.hasColdStorage && !facility.isPowerOutage) baseSpoilageRate *= 0.20;
+        if (newDaysInStorage > crop.spoilageDays) {
+          let baseSpoilageRate = crop.spoilageRatePerDay;
+          if (item.hasFieldHeat && !item.isHydrocooled) baseSpoilageRate *= 2.0;
+          if (facility.hasColdStorage && !facility.isPowerOutage) baseSpoilageRate *= 0.2;
 
-        const spoiledAmount = Math.min(currentQty, currentQty * baseSpoilageRate);
-        currentQty -= spoiledAmount;
-      }
+          const spoiledAmount = Math.min(currentQty, currentQty * baseSpoilageRate);
+          currentQty -= spoiledAmount;
+        }
 
-      const strategyConfig =
-        PRICING_STRATEGIES.find((s) => s.id === item.pricingStrategy) || PRICING_STRATEGIES[1];
-      const marketMod = state.marketPriceModifiers[item.cropId] || 1.0;
-      const organicBonus = item.isOrganic ? 1.80 : 1.0;
-      const unitRetailPrice = crop.baseSalePrice * marketMod * organicBonus * (1 + strategyConfig.markupPct / 100);
+        const strategyConfig =
+          PRICING_STRATEGIES.find((s) => s.id === item.pricingStrategy) || PRICING_STRATEGIES[1];
+        const marketMod = state.marketPriceModifiers[item.cropId] || 1.0;
+        const organicBonus = item.isOrganic ? 1.8 : 1.0;
+        const unitRetailPrice =
+          crop.baseSalePrice * marketMod * organicBonus * (1 + strategyConfig.markupPct / 100);
 
-      const baseDailyShoppers = 15 * state.farmstandLevel + Math.floor(Math.random() * 10);
-      const unitsSold = Math.min(currentQty, Math.floor(baseDailyShoppers * strategyConfig.conversionMultiplier));
+        const baseDailyShoppers = 15 * state.farmstandLevel + Math.floor(Math.random() * 10);
+        const unitsSold = Math.min(
+          currentQty,
+          Math.floor(baseDailyShoppers * strategyConfig.conversionMultiplier)
+        );
 
-      if (unitsSold > 0) {
-        const revenue = Number((unitsSold * unitRetailPrice).toFixed(2));
-        totalDailySalesRevenue += revenue;
-        currentQty -= unitsSold;
-      }
+        if (unitsSold > 0) {
+          const revenue = Number((unitsSold * unitRetailPrice).toFixed(2));
+          totalDailySalesRevenue += revenue;
+          currentQty -= unitsSold;
+        }
 
-      return { ...item, quantity: Math.max(0, Number(currentQty.toFixed(1))), daysInStorage: newDaysInStorage };
-    }).filter((item) => item.quantity > 0.1);
+        return {
+          ...item,
+          quantity: Math.max(0, Number(currentQty.toFixed(1))),
+          daysInStorage: newDaysInStorage,
+        };
+      })
+      .filter((item) => item.quantity > 0.1);
 
-    if (totalDailySalesRevenue > 0) updatedCash += totalDailySalesRevenue;
+    if (totalDailySalesRevenue > 0) {
+      updatedCash += totalDailySalesRevenue;
+      newLedger.unshift({
+        id: `farmstand-sales-${Date.now()}`,
+        day: newDay,
+        season: newSeason,
+        year: newYear,
+        description: `Farmstand Retail Sales Revenue`,
+        amount: totalDailySalesRevenue,
+        category: 'Farmstand Sales',
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    }
 
-    const dailyMaint = 30 + state.fields.length * 15;
-    updatedCash = Math.max(0, updatedCash - dailyMaint);
-
-    const landValue = state.fields.reduce((acc, f) => acc + f.acres * region.baseLandCost, 0);
-    const fleetVal = state.fleet.reduce((acc, m) => acc + m.purchasePrice * (m.condition / 100), 0);
+    // Valuation
+    const landValue = updatedFields.reduce((acc, f) => acc + f.acres * region.baseLandCost, 0);
+    const fleetVal = updatedFleet.reduce((acc, m) => acc + m.purchasePrice * (m.condition / 100), 0);
     const inventoryVal = updatedInventory.reduce((acc, item) => {
       const crop = CROPS.find((c) => c.id === item.cropId);
       return acc + item.quantity * (crop?.baseSalePrice || 10);
     }, 0);
+    const loanDebt = opLoan ? opLoan.principal : 0;
+    const mortgageDebt = state.mortgages.reduce((acc, m) => acc + m.principalRemaining, 0);
 
     set({
       dayOfYear: newDay,
@@ -559,11 +966,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       selectedRegion: region,
       weatherForecast: updatedForecast,
       cash: Number(updatedCash.toFixed(2)),
-      netWorth: Number((updatedCash + landValue + fleetVal + inventoryVal).toFixed(2)),
+      netWorth: Number((updatedCash + landValue + fleetVal + inventoryVal - loanDebt - mortgageDebt).toFixed(2)),
+      fields: updatedFields,
+      fleet: updatedFleet,
+      seasonalWorkers: updatedWorkers,
+      operatingLoan: opLoan,
       storageFacility: facility,
       geneticRnd: rnd,
       inventory: updatedInventory,
-      notifications: newNotifications.slice(0, 40),
+      notifications: newNotifications.slice(0, 50),
       ledger: newLedger.slice(0, 100),
     });
 
@@ -850,9 +1261,38 @@ export const useGameStore = create<GameState>((set, get) => ({
       fields: state.fields.map((f) => {
         if (f.id !== fieldId) return f;
         const soil = { ...f.soil };
-        soil.nitrogen = Math.min(100, soil.nitrogen + fert.nGain);
+        if (fert.delivery === 'granular' && fert.requiresRain) {
+          // Sits on surface until rain or drip irrigation dissolves it
+          soil.surfaceGranular = {
+            n: fert.nGain,
+            p: fert.pGain,
+            k: fert.kGain,
+            ca: fert.caGain,
+            ph: fert.phDelta,
+          };
+        } else {
+          // Immediate integration (fertigation, foliar, or non-rain granular)
+          soil.nitrogen = Math.min(100, soil.nitrogen + fert.nGain);
+          soil.phosphorus = Math.min(100, soil.phosphorus + fert.pGain);
+          soil.potassium = Math.min(100, soil.potassium + fert.kGain);
+          soil.calcium = Math.min(100, soil.calcium + fert.caGain);
+          soil.pH = Math.max(4.5, Math.min(8.5, Number((soil.pH + fert.phDelta).toFixed(1))));
+        }
         return { ...f, soil };
       }),
+      ledger: [
+        {
+          id: `fert-buy-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Applied ${fert.name} to ${field.name}`,
+          amount: -cost,
+          category: 'Fertilizer',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
     });
     sound.playClick();
     return true;
@@ -868,6 +1308,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       cash: Number((state.cash - cost).toFixed(2)),
       fields: state.fields.map((f) => (f.id === fieldId ? { ...f, activeDiseases: f.activeDiseases.filter((d) => d !== diseaseId) } : f)),
+      ledger: [
+        {
+          id: `disease-treat-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Cured ${disease.name} on ${field.name}`,
+          amount: -cost,
+          category: 'Disease Treatment',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
     });
     sound.playClick();
     return true;
@@ -879,7 +1332,33 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!field) return false;
     const cost = preventative === 'copperFungicide' ? 140 * field.acres : 90 * field.acres;
     if (state.cash < cost) return false;
-    set({ cash: Number((state.cash - cost).toFixed(2)) });
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      fields: state.fields.map((f) =>
+        f.id === fieldId
+          ? {
+              ...f,
+              diseasePreventatives: {
+                ...f.diseasePreventatives,
+                [preventative]: true,
+              },
+            }
+          : f
+      ),
+      ledger: [
+        {
+          id: `preventative-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Applied ${preventative === 'copperFungicide' ? 'Copper Fungicide Spray' : 'Elemental Sulfur Spray'} to ${field.name}`,
+          amount: -cost,
+          category: 'Disease Treatment',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
+    });
     sound.playClick();
     return true;
   },
@@ -888,23 +1367,87 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     const field = state.fields.find((f) => f.id === fieldId);
     if (!field || state.cash < 1200 * field.acres) return false;
-    set({ cash: Number((state.cash - 1200 * field.acres).toFixed(2)), fields: state.fields.map((f) => (f.id === fieldId ? { ...f, hasDripIrrigation: true } : f)) });
+    const cost = 1200 * field.acres;
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, hasDripIrrigation: true } : f)),
+      ledger: [
+        {
+          id: `drip-install-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Installed Drip Irrigation System on ${field.name}`,
+          amount: -cost,
+          category: 'Facility Infrastructure',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
+    });
     sound.playCashRegister();
     return true;
   },
 
-  installStrawMulch: (_fieldId: string) => {
+  installStrawMulch: (fieldId: string) => {
     const state = get();
-    if (state.cash < 200) return false;
-    set({ cash: Number((state.cash - 200).toFixed(2)) });
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || field.hasStrawMulch) return false;
+    const cost = 200 * field.acres;
+    if (state.cash < cost) return false;
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, hasStrawMulch: true } : f)),
+      ledger: [
+        {
+          id: `mulch-install-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Installed Moisture-Retaining Straw Mulch on ${field.name}`,
+          amount: -cost,
+          category: 'Facility Infrastructure',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
+    });
     sound.playClick();
     return true;
   },
 
-  runSoilTest: (_fieldId: string) => {
+  runSoilTest: (fieldId: string) => {
     const state = get();
-    if (state.cash < 150) return false;
-    set({ cash: Number((state.cash - 150).toFixed(2)) });
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || state.cash < 150) return false;
+    set({
+      cash: Number((state.cash - 150).toFixed(2)),
+      notifications: [
+        {
+          id: `soil-test-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'info',
+          title: `🧪 Soil Assay: ${field.name}`,
+          message: `NPK: N:${field.soil.nitrogen} P:${field.soil.phosphorus} K:${field.soil.potassium} Ca:${field.soil.calcium} | Soil pH: ${field.soil.pH} | Moisture: ${field.moistureLevel}%`,
+        },
+        ...state.notifications,
+      ],
+      ledger: [
+        {
+          id: `soil-assay-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Agronomic Lab Soil Assay for ${field.name}`,
+          amount: -150,
+          category: 'Maintenance',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
+    });
     sound.playClick();
     return true;
   },
@@ -913,7 +1456,51 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (!state.selectedRegion || state.cash < state.selectedRegion.baseLandCost * 10) return false;
     const cost = state.selectedRegion.baseLandCost * 10;
-    set({ cash: Number((state.cash - cost).toFixed(2)) });
+    const newField: Field = {
+      id: `field-${Date.now()}`,
+      name: `Plot ${state.fields.length + 1}`,
+      acres: 10,
+      soilQuality: 80,
+      currentCropId: null,
+      plantedDay: null,
+      growthDays: 0,
+      moistureLevel: 65,
+      moistureHistory: [65, 65, 65, 65, 65],
+      fertilized: false,
+      irrigated: false,
+      hasDripIrrigation: false,
+      hasStrawMulch: false,
+      status: 'empty',
+      soil: {
+        nitrogen: 65,
+        phosphorus: 55,
+        potassium: 55,
+        calcium: 50,
+        pH: 6.5,
+        surfaceGranular: null,
+      },
+      activeDiseases: [],
+      diseasePreventatives: { copperFungicide: false, sulfurOil: false },
+      insuranceTier: 'none',
+    };
+
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      fields: [...state.fields, newField],
+      ledger: [
+        {
+          id: `land-buy-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Purchased 10 Acres (${newField.name})`,
+          amount: -cost,
+          category: 'Land Purchase',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
+    });
     sound.playCashRegister();
     return true;
   },

@@ -246,9 +246,14 @@ export const FieldsView: React.FC = () => {
                   <div className="p-4 bg-stone-950/60 rounded-xl border border-stone-800/60 space-y-3 mb-4">
                     <div className="flex items-center gap-3">
                       <span className="text-3xl">{crop.icon}</span>
-                      <div>
-                        <h4 className="font-bold text-stone-100 text-sm">{crop.name}</h4>
-                        <p className="text-xs text-stone-400">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-stone-100 text-sm">{crop.name}</h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-stone-900 border border-stone-800 text-stone-300">
+                            {growthPct >= 100 ? '🌾 Harvest Ready' : growthPct >= 60 ? '🪴 Bulking / Pods' : growthPct >= 25 ? '🌿 Vegetative' : '🌱 Emergence'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-400 mt-0.5">
                           Yield: ~{Math.round(field.acres * crop.expectedYieldPerAcre * (field.soilQuality / 100))} units
                         </p>
                       </div>
@@ -257,7 +262,7 @@ export const FieldsView: React.FC = () => {
                     {/* Gradient Growth Bar */}
                     <div>
                       <div className="flex justify-between text-xs mb-1 font-mono">
-                        <span className="text-stone-400">Growth: {field.growthDays} / {crop.daysToMaturity} days</span>
+                        <span className="text-stone-400">Growth: {Math.floor(field.growthDays)} / {crop.daysToMaturity} days</span>
                         <span className="text-emerald-400 font-bold">{growthPct}%</span>
                       </div>
                       <div className="w-full bg-stone-800 rounded-full h-2.5 overflow-hidden p-0.5">
