@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type {
   AuctionDeal,
   DiseaseId,
@@ -56,6 +57,12 @@ interface GameState {
   csaSubscribers: number;
   csaSatisfaction: number;
   wineGrapesHarvested: number;
+  isVictory: boolean;
+  isGameOver: boolean;
+  gameOverReason: string | null;
+  isEndlessMode: boolean;
+  consecutiveNegativeCashDays: number;
+  fastForwardAlert: string | null;
 
   // Environment & Geography
   selectedRegion: Region | null;
@@ -104,6 +111,11 @@ interface GameState {
   setGameSpeed: (speed: GameSpeed) => void;
   setActiveTab: (tab: 'desk' | 'fields' | 'market' | 'barn' | 'garage' | 'roster' | 'bank' | 'seeds' | 'ledger' | 'endless') => void;
   nextDay: () => void;
+  dismissVictory: () => void;
+  dismissGameOver: () => void;
+  clearFastForwardAlert: () => void;
+  advanceMultipleDays: (days: number) => { daysAdvanced: number; stoppedReason?: string };
+  advanceToNextHarvest: () => { daysAdvanced: number; stoppedReason?: string };
 
   // Endless Mode Actions
   buyNeighborAiFarm: (farmId: string) => boolean;
@@ -133,6 +145,7 @@ interface GameState {
   installDripIrrigation: (fieldId: string) => boolean;
   installStrawMulch: (fieldId: string) => boolean;
   runSoilTest: (fieldId: string) => boolean;
+  certifyFieldOrganic: (fieldId: string) => boolean;
   buyLand: () => boolean;
 
   // Financials & Banking Actions
@@ -224,20 +237,28 @@ const generateNeighborFarms = (): NeighborAiFarm[] => [
   },
 ];
 
-export const useGameStore = create<GameState>((set, get) => ({
-  year: 1,
-  season: 'Spring',
-  dayOfYear: 1,
-  cash: 100000,
-  netWorth: 100000,
-  gameSpeed: 0,
-  gameStarted: false,
-  activeTab: 'desk',
+export const useGameStore = create<GameState>()(
+  persist(
+    (set, get) => ({
+      year: 1,
+      season: 'Spring',
+      dayOfYear: 1,
+      cash: 100000,
+      netWorth: 100000,
+      gameSpeed: 0,
+      gameStarted: false,
+      activeTab: 'desk',
 
-  selectedScenario: 'inherited_acre',
-  csaSubscribers: 0,
-  csaSatisfaction: 95,
-  wineGrapesHarvested: 0,
+      selectedScenario: 'inherited_acre',
+      csaSubscribers: 0,
+      csaSatisfaction: 95,
+      wineGrapesHarvested: 0,
+      isVictory: false,
+      isGameOver: false,
+      gameOverReason: null,
+      isEndlessMode: false,
+      consecutiveNegativeCashDays: 0,
+      fastForwardAlert: null,
 
   selectedRegion: null,
   currentWeather: 'Sunny',
@@ -376,6 +397,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       year: 1,
       season: 'Spring',
       csaSubscribers: scenarioId === 'csa_nightmare' ? 500 : 0,
+      csaSatisfaction: 95,
+      wineGrapesHarvested: 0,
+      isVictory: false,
+      isGameOver: false,
+      gameOverReason: null,
+      isEndlessMode: scenarioId === 'free_play',
+      consecutiveNegativeCashDays: 0,
+      fastForwardAlert: null,
       notifications: [
         {
           id: `scenario-start-${Date.now()}`,
@@ -394,7 +423,59 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   selectRegion: (regionId: string) => {
     const region = REGIONS.find((r) => r.id === regionId) || REGIONS[0];
-    set({ selectedRegion: region });
+    const initialFields: Field[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `field-sandbox-${i + 1}`,
+      name: `Plot ${i + 1} (20 Acres)`,
+      acres: 20,
+      soilQuality: 75,
+      currentCropId: null,
+      plantedDay: null,
+      growthDays: 0,
+      moistureLevel: 75,
+      moistureHistory: [75, 75, 75, 75, 75],
+      fertilized: false,
+      irrigated: false,
+      hasDripIrrigation: false,
+      hasStrawMulch: false,
+      status: 'empty',
+      soil: { nitrogen: 65, phosphorus: 60, potassium: 60, calcium: 55, pH: 6.5, surfaceGranular: null },
+      activeDiseases: [],
+      diseasePreventatives: { copperFungicide: false, sulfurOil: false },
+      insuranceTier: 'none',
+    }));
+
+    set({
+      selectedRegion: region,
+      selectedScenario: 'free_play',
+      cash: 100000,
+      operatingLoan: null,
+      fields: initialFields,
+      gameStarted: true,
+      dayOfYear: 1,
+      year: 1,
+      season: 'Spring',
+      csaSubscribers: 0,
+      csaSatisfaction: 95,
+      wineGrapesHarvested: 0,
+      isVictory: false,
+      isGameOver: false,
+      gameOverReason: null,
+      isEndlessMode: true,
+      consecutiveNegativeCashDays: 0,
+      fastForwardAlert: null,
+      notifications: [
+        {
+          id: `sandbox-start-${Date.now()}`,
+          day: 1,
+          season: 'Spring',
+          year: 1,
+          type: 'info',
+          title: `Sandbox Started: ${region.name}`,
+          message: `Free-play sandbox initiated with $100,000 working capital and 60 acres in ${region.name}.`,
+        },
+      ],
+    });
+    sound.playClick();
   },
 
   setGameSpeed: (speed: GameSpeed) => {
@@ -958,6 +1039,88 @@ export const useGameStore = create<GameState>((set, get) => ({
     const loanDebt = opLoan ? opLoan.principal : 0;
     const mortgageDebt = state.mortgages.reduce((acc, m) => acc + m.principalRemaining, 0);
 
+    // ==========================================
+    // 7. SCENARIO VICTORY CHECKER
+    // ==========================================
+    let victoryTriggered = false;
+    if (!state.isVictory && !state.isEndlessMode && state.selectedScenario !== 'free_play') {
+      const scenId = state.selectedScenario;
+      if (scenId === 'inherited_acre' && updatedCash >= 50000 && state.farmstandLevel >= 2) {
+        victoryTriggered = true;
+      } else if (scenId === 'organic_leap') {
+        const organicAcres = updatedFields
+          .filter((f) => f.isCertifiedOrganic)
+          .reduce((sum, f) => sum + f.acres, 0);
+        const organicContractsFulfilled = state.wholesaleContracts
+          .filter((c) => c.isOrganicRequired && c.unitsDelivered > 0).length;
+        if (organicAcres >= 100 && organicContractsFulfilled >= 3) {
+          victoryTriggered = true;
+        }
+      } else if (scenId === 'csa_nightmare' && state.csaSubscribers >= 500 && state.csaSatisfaction >= 90 && newYear >= 3) {
+        victoryTriggered = true;
+      } else if (scenId === 'agribusiness_empire' && updatedCash >= 5000000 && (!opLoan || opLoan.principal <= 0) && state.mortgages.length === 0) {
+        victoryTriggered = true;
+      } else if (scenId === 'family_farm_rehab') {
+        const allSoilNpkRestored = updatedFields.length > 0 && updatedFields.every(
+          (f) => f.soil.nitrogen >= 60 && f.soil.phosphorus >= 60 && f.soil.potassium >= 60
+        );
+        if (allSoilNpkRestored && updatedCash >= 100000) {
+          victoryTriggered = true;
+        }
+      } else if (scenId === 'vineyard_pioneer' && state.wineGrapesHarvested >= 100 && newYear >= 4) {
+        victoryTriggered = true;
+      }
+    }
+
+    if (victoryTriggered) {
+      newNotifications.unshift({
+        id: `victory-${Date.now()}`,
+        day: newDay,
+        season: newSeason,
+        year: newYear,
+        type: 'success',
+        title: `🏆 CAMPAIGN OBJECTIVE ACHIEVED!`,
+        message: `You fulfilled all objectives for this campaign. Outstanding agricultural leadership!`,
+      });
+      sound.playHarvest();
+    }
+
+    // ==========================================
+    // 8. BANKRUPTCY & INSOLVENCY DEFEAT CHECKER
+    // ==========================================
+    let gameOverTriggered = false;
+    let gameOverReason: string | null = null;
+    let newNegDays = state.consecutiveNegativeCashDays;
+
+    if (updatedCash < 0) {
+      newNegDays += 1;
+    } else {
+      newNegDays = 0;
+    }
+
+    if (updatedCash <= -25000) {
+      gameOverTriggered = true;
+      gameOverReason = `Foreclosure by First Agricultural Credit: Working capital deficit reached $${Math.abs(Math.round(updatedCash)).toLocaleString()} (exceeding the -$25,000 legal insolvency threshold). Creditors seized farm assets.`;
+    } else if (opLoan && opLoan.isRollover && newYear > opLoan.dueYear && updatedCash < 0) {
+      gameOverTriggered = true;
+      gameOverReason = `Operating Loan Default Liquidation: Operating loan was in rollover penalty status and remained unpaid after Year ${opLoan.dueYear}. Foreclosure action initiated.`;
+    } else if (newNegDays >= 45) {
+      gameOverTriggered = true;
+      gameOverReason = `Receivership: Enterprise operated with negative working capital for 45 consecutive days without returning to positive balance. Secured lenders revoked operating authority.`;
+    }
+
+    if (gameOverTriggered) {
+      newNotifications.unshift({
+        id: `game-over-${Date.now()}`,
+        day: newDay,
+        season: newSeason,
+        year: newYear,
+        type: 'error',
+        title: `🚨 Bank Foreclosure & Insolvency`,
+        message: gameOverReason || 'Farm declared insolvent by creditors.',
+      });
+    }
+
     set({
       dayOfYear: newDay,
       season: newSeason,
@@ -976,6 +1139,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       inventory: updatedInventory,
       notifications: newNotifications.slice(0, 50),
       ledger: newLedger.slice(0, 100),
+      isVictory: state.isVictory || victoryTriggered,
+      isGameOver: gameOverTriggered,
+      gameOverReason: gameOverReason || state.gameOverReason,
+      gameSpeed: (victoryTriggered || gameOverTriggered) ? 0 : state.gameSpeed,
+      consecutiveNegativeCashDays: newNegDays,
     });
 
     sound.playDayTick();
@@ -1227,11 +1395,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       hasFieldHeat: true,
       isHydrocooled: false,
       grade: 'A',
+      isOrganic: field.isCertifiedOrganic || false,
     });
+
+    const isWineGrapes = crop.id === 'crop_grapes_wine';
+    const newWineGrapes = isWineGrapes ? state.wineGrapesHarvested + harvestQuantity : state.wineGrapesHarvested;
 
     set({
       fields: state.fields.map((f) => (f.id === fieldId ? { ...f, currentCropId: null, plantedDay: null, growthDays: 0, status: 'empty' as const } : f)),
       inventory: updatedInventory,
+      wineGrapesHarvested: newWineGrapes,
     });
     sound.playHarvest();
     return true;
@@ -1662,7 +1835,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     const contract = state.wholesaleContracts.find((c) => c.id === contractId);
     if (!contract) return false;
     const rev = Number((quantity * contract.contractPricePerUnit).toFixed(2));
-    set({ cash: Number((state.cash + rev).toFixed(2)) });
+    set({
+      cash: Number((state.cash + rev).toFixed(2)),
+      wholesaleContracts: state.wholesaleContracts.map((c) =>
+        c.id === contractId ? { ...c, unitsDelivered: c.unitsDelivered + quantity } : c
+      ),
+    });
     sound.playCashRegister();
     return true;
   },
@@ -1683,6 +1861,151 @@ export const useGameStore = create<GameState>((set, get) => ({
     return true;
   },
 
+  dismissVictory: () => {
+    set({ isVictory: false, isEndlessMode: true, activeTab: 'endless' });
+  },
+
+  dismissGameOver: () => {
+    get().restartGame();
+  },
+
+  clearFastForwardAlert: () => {
+    set({ fastForwardAlert: null });
+  },
+
+  certifyFieldOrganic: (fieldId: string) => {
+    const state = get();
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || field.isCertifiedOrganic) return false;
+    const certCost = 2500;
+    if (state.cash < certCost) return false;
+
+    const updatedFields = state.fields.map((f) =>
+      f.id === fieldId ? { ...f, isCertifiedOrganic: true, soilQuality: Math.min(100, f.soilQuality + 5) } : f
+    );
+
+    set({
+      cash: Number((state.cash - certCost).toFixed(2)),
+      fields: updatedFields,
+      notifications: [
+        {
+          id: `organic-cert-${Date.now()}-${fieldId}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `🌿 USDA Organic Certified: ${field.name}`,
+          message: `Field inspection passed! Crops harvested on this plot now command +80% organic retail premiums.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+      ledger: [
+        {
+          id: `organic-fee-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `USDA Organic Certification Fee (${field.name})`,
+          amount: -certCost,
+          category: 'Upgrades' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+    });
+
+    sound.playCashRegister();
+    return true;
+  },
+
+  advanceMultipleDays: (days: number) => {
+    let daysCount = 0;
+    let stopReason: string | undefined;
+
+    for (let i = 0; i < days; i++) {
+      const beforeState = get();
+      if (beforeState.isGameOver || beforeState.isVictory) {
+        stopReason = beforeState.isVictory ? 'Campaign Victory Achieved!' : 'Farm Insolvent';
+        break;
+      }
+
+      // Execute next day tick
+      beforeState.nextDay();
+      daysCount++;
+
+      const afterState = get();
+      if (afterState.isGameOver) {
+        stopReason = 'Farm went into bank receivership!';
+        break;
+      }
+      if (afterState.isVictory) {
+        stopReason = 'Campaign Victory Achieved!';
+        break;
+      }
+
+      // 1. Newly ready harvest
+      const hadReadyBefore = beforeState.fields.some((f) => f.status === 'ready');
+      const hasReadyNow = afterState.fields.some((f) => f.status === 'ready');
+      if (!hadReadyBefore && hasReadyNow) {
+        const readyField = afterState.fields.find((f) => f.status === 'ready');
+        stopReason = `Harvest Ready on ${readyField?.name || 'Field'}!`;
+        break;
+      }
+
+      // 2. New disease outbreak
+      const totalDiseasesBefore = beforeState.fields.reduce((sum, f) => sum + f.activeDiseases.length, 0);
+      const totalDiseasesNow = afterState.fields.reduce((sum, f) => sum + f.activeDiseases.length, 0);
+      if (totalDiseasesNow > totalDiseasesBefore) {
+        stopReason = 'Disease Outbreak detected!';
+        break;
+      }
+
+      // 3. Power Outage in Cold Storage
+      if (!beforeState.storageFacility.isPowerOutage && afterState.storageFacility.isPowerOutage) {
+        stopReason = 'Cold Storage Power Outage!';
+        break;
+      }
+
+      // 4. Equipment Breakdown
+      const brokeBefore = beforeState.fleet.some((m) => m.status === 'broken_down');
+      const brokeNow = afterState.fleet.some((m) => m.status === 'broken_down');
+      if (!brokeBefore && brokeNow) {
+        stopReason = 'Machinery breakdown in field!';
+        break;
+      }
+
+      // 5. Severe Weather arrival
+      if (
+        (afterState.currentWeather === 'Frost' || afterState.currentWeather === 'Storm') &&
+        beforeState.currentWeather !== afterState.currentWeather
+      ) {
+        stopReason = `Severe Weather: ${afterState.currentWeather} warning!`;
+        break;
+      }
+
+      // 6. Cash drop into negative
+      if (beforeState.cash >= 0 && afterState.cash < 0) {
+        stopReason = 'Account Overdraft! Working capital negative.';
+        break;
+      }
+    }
+
+    if (stopReason) {
+      set({ gameSpeed: 0, fastForwardAlert: stopReason });
+    }
+
+    return { daysAdvanced: daysCount, stoppedReason: stopReason };
+  },
+
+  advanceToNextHarvest: () => {
+    const state = get();
+    const growingFields = state.fields.filter((f) => f.status === 'growing');
+    if (growingFields.length === 0) {
+      return { daysAdvanced: 0, stoppedReason: 'No crops currently growing' };
+    }
+    return get().advanceMultipleDays(60);
+  },
+
   restartGame: () => {
     set({
       year: 1,
@@ -1693,6 +2016,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       gameSpeed: 0,
       gameStarted: false,
       selectedRegion: null,
+      selectedScenario: 'inherited_acre',
+      csaSubscribers: 0,
+      csaSatisfaction: 95,
+      wineGrapesHarvested: 0,
+      isVictory: false,
+      isGameOver: false,
+      gameOverReason: null,
+      isEndlessMode: false,
+      consecutiveNegativeCashDays: 0,
+      fastForwardAlert: null,
       fields: [],
       inventory: [],
       wholesaleContracts: [],
@@ -1728,4 +2061,52 @@ export const useGameStore = create<GameState>((set, get) => ({
       activeTab: 'desk',
     });
   },
-}));
+    }),
+    {
+      name: 'agronomics-save-v1',
+      partialize: (state) => ({
+        year: state.year,
+        season: state.season,
+        dayOfYear: state.dayOfYear,
+        cash: state.cash,
+        netWorth: state.netWorth,
+        gameStarted: state.gameStarted,
+        activeTab: state.activeTab,
+        selectedScenario: state.selectedScenario,
+        csaSubscribers: state.csaSubscribers,
+        csaSatisfaction: state.csaSatisfaction,
+        wineGrapesHarvested: state.wineGrapesHarvested,
+        isVictory: state.isVictory,
+        isGameOver: state.isGameOver,
+        gameOverReason: state.gameOverReason,
+        isEndlessMode: state.isEndlessMode,
+        consecutiveNegativeCashDays: state.consecutiveNegativeCashDays,
+        selectedRegion: state.selectedRegion,
+        currentWeather: state.currentWeather,
+        weatherForecast: state.weatherForecast,
+        marketPriceModifiers: state.marketPriceModifiers,
+        fields: state.fields,
+        inventory: state.inventory,
+        wholesaleContracts: state.wholesaleContracts,
+        ledger: state.ledger,
+        notifications: state.notifications,
+        fleet: state.fleet,
+        auctionDeals: state.auctionDeals,
+        neighborFarms: state.neighborFarms,
+        staff: state.staff,
+        seasonalWorkers: state.seasonalWorkers,
+        workerHousingLevel: state.workerHousingLevel,
+        overtimeActive: state.overtimeActive,
+        operatingLoan: state.operatingLoan,
+        mortgages: state.mortgages,
+        futuresContracts: state.futuresContracts,
+        storageFacility: state.storageFacility,
+        seedCatalog: state.seedCatalog,
+        geneticRnd: state.geneticRnd,
+        barnCapacity: state.barnCapacity,
+        farmstandLevel: state.farmstandLevel,
+        garageLevel: state.garageLevel,
+      }),
+    }
+  )
+);

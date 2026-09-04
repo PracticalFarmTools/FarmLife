@@ -36,6 +36,7 @@ export const FieldsView: React.FC = () => {
     installDripIrrigation,
     installStrawMulch,
     runSoilTest,
+    certifyFieldOrganic,
     buyLand,
   } = useGameStore();
 
@@ -132,6 +133,24 @@ export const FieldsView: React.FC = () => {
                           🌾 Straw Mulch
                         </span>
                       )}
+                      {field.isCertifiedOrganic ? (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 text-[10px] font-bold">
+                          🌱 USDA Organic
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => certifyFieldOrganic(field.id)}
+                          disabled={cash < 2500}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer ${
+                            cash >= 2500
+                              ? 'bg-stone-900 hover:bg-emerald-950 text-stone-400 hover:text-emerald-300 border-stone-800 hover:border-emerald-700'
+                              : 'bg-stone-950 text-stone-600 border-stone-900 cursor-not-allowed'
+                          }`}
+                          title="Pay $2,500 inspection fee for USDA Organic Certification (+80% wholesale/retail premium)"
+                        >
+                          + Certify Organic ($2.5k)
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -221,10 +240,10 @@ export const FieldsView: React.FC = () => {
                     <div className="flex justify-between text-stone-300 mb-1">
                       <span className="flex items-center gap-1 text-stone-400">
                         <Droplets className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Moisture:</span>
+                        <span>Moisture Level:</span>
                       </span>
                       <span
-                        className={`font-mono font-bold ${
+                        className={`font-mono font-bold text-xs ${
                           field.moistureLevel < 30
                             ? 'text-amber-400'
                             : field.moistureLevel > 85
@@ -232,53 +251,121 @@ export const FieldsView: React.FC = () => {
                             : 'text-blue-400'
                         }`}
                       >
-                        {field.moistureLevel}% {field.moistureLevel < 30 ? '(Drought Risk!)' : field.moistureLevel > 85 ? '(Flood Risk!)' : ''}
+                        {field.moistureLevel}% {field.moistureLevel < 30 ? '(Drought Stress)' : field.moistureLevel > 85 ? '(Waterlogged)' : '(Optimal)'}
                       </span>
                     </div>
-                    <div className="w-full bg-stone-800 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-blue-500 h-full" style={{ width: `${field.moistureLevel}%` }} />
+                    <div className="w-full bg-stone-800 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          field.moistureLevel < 30
+                            ? 'bg-amber-500'
+                            : field.moistureLevel > 85
+                            ? 'bg-rose-500'
+                            : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${field.moistureLevel}%` }}
+                      />
                     </div>
                   </div>
                 </div>
 
-                {/* Crop Status Section */}
-                {crop ? (
-                  <div className="p-4 bg-stone-950/60 rounded-xl border border-stone-800/60 space-y-3 mb-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">{crop.icon}</span>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-bold text-stone-100 text-sm">{crop.name}</h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-stone-900 border border-stone-800 text-stone-300">
-                            {growthPct >= 100 ? '🌾 Harvest Ready' : growthPct >= 60 ? '🪴 Bulking / Pods' : growthPct >= 25 ? '🌿 Vegetative' : '🌱 Emergence'}
-                          </span>
+                {/* Visual 2D Agricultural Plot Bed */}
+                <div className="relative rounded-2xl overflow-hidden border border-stone-800 shadow-inner mb-4">
+                  {isEmpty ? (
+                    /* Fallow Furrowed Soil Graphic */
+                    <div className="p-5 bg-gradient-to-b from-stone-900 via-stone-950 to-[#231812] min-h-[110px] flex flex-col items-center justify-center text-center relative overflow-hidden">
+                      <div className="absolute inset-0 opacity-20 bg-[repeating-linear-gradient(0deg,#92400e,#92400e_2px,transparent_2px,transparent_18px)] pointer-events-none" />
+                      <div className="relative z-10 space-y-1.5">
+                        <div className="w-10 h-10 rounded-full bg-stone-900/90 border border-stone-800 flex items-center justify-center mx-auto text-amber-600/70 shadow-inner">
+                          <Sprout className="w-5 h-5" />
                         </div>
-                        <p className="text-xs text-stone-400 mt-0.5">
-                          Yield: ~{Math.round(field.acres * crop.expectedYieldPerAcre * (field.soilQuality / 100))} units
-                        </p>
+                        <p className="text-xs font-bold text-stone-300">Fallow Plot — Resting Soil</p>
+                        <p className="text-[10px] text-stone-500 font-mono">Tilled rows ready for drill seeder</p>
                       </div>
                     </div>
+                  ) : isReady ? (
+                    /* Harvest Ready Radiant Golden Canopy */
+                    <div className="p-4 bg-gradient-to-b from-amber-950/70 via-stone-950 to-[#2c1b09] border border-amber-500/80 min-h-[120px] flex flex-col justify-between relative overflow-hidden ring-2 ring-amber-500/30">
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-500/10 to-transparent animate-pulse pointer-events-none" />
+                      <div className="flex items-center justify-between relative z-10">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-3xl animate-bounce">{crop?.icon}</span>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="font-extrabold text-stone-100 text-sm">{crop?.name}</h4>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-stone-950 font-black tracking-wider uppercase shadow">
+                                READY
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-amber-300 font-mono mt-0.5">
+                              Est. Yield: ~{Math.round(field.acres * (crop?.expectedYieldPerAcre || 10) * (field.soilQuality / 100))} units
+                            </p>
+                          </div>
+                        </div>
 
-                    {/* Gradient Growth Bar */}
-                    <div>
-                      <div className="flex justify-between text-xs mb-1 font-mono">
-                        <span className="text-stone-400">Growth: {Math.floor(field.growthDays)} / {crop.daysToMaturity} days</span>
-                        <span className="text-emerald-400 font-bold">{growthPct}%</span>
+                        <button
+                          onClick={() => harvestCrop(field.id)}
+                          className="py-2 px-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-stone-950 font-black text-xs shadow-lg flex items-center gap-1.5 cursor-pointer transition"
+                        >
+                          <Scissors className="w-3.5 h-3.5" />
+                          <span>HARVEST</span>
+                        </button>
                       </div>
-                      <div className="w-full bg-stone-800 rounded-full h-2.5 overflow-hidden p-0.5">
+
+                      {/* Golden Canopy Representation */}
+                      <div className="relative z-10 flex justify-around text-lg opacity-90 py-1 bg-stone-900/60 rounded-xl border border-amber-800/50 mt-2">
+                        <span>🌾</span><span>🌾</span><span>{crop?.icon}</span><span>🌾</span><span>🌾</span>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Growing Stage Canopy Graphic */
+                    <div className="p-4 bg-gradient-to-b from-stone-900 via-stone-950 to-[#1b2819] min-h-[120px] flex flex-col justify-between relative overflow-hidden">
+                      <div className="absolute inset-0 opacity-20 bg-[repeating-linear-gradient(0deg,#15803d,#15803d_2px,transparent_2px,transparent_18px)] pointer-events-none" />
+                      <div className="flex items-center justify-between relative z-10 mb-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">{crop?.icon}</span>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="font-bold text-stone-100 text-sm">{crop?.name}</h4>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                growthPct >= 60
+                                  ? 'bg-amber-950 text-amber-300 border-amber-800'
+                                  : growthPct >= 25
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                                  : 'bg-stone-900 text-stone-300 border-stone-700'
+                              }`}>
+                                {growthPct >= 60 ? '🪴 Bulking / Pods' : growthPct >= 25 ? '🌿 Vegetative' : '🌱 Emergence'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-stone-400 mt-0.5">
+                              Day {Math.floor(field.growthDays)} of {crop?.daysToMaturity} days
+                            </p>
+                          </div>
+                        </div>
+                        <span className="font-mono font-extrabold text-sm text-emerald-400">{growthPct}%</span>
+                      </div>
+
+                      {/* Plant Stage Row Graphic */}
+                      <div className="relative z-10 flex justify-around text-sm py-1 bg-stone-900/70 rounded-xl border border-stone-800/80 mb-2">
+                        {growthPct < 25 ? (
+                          <><span>🌱</span><span>🌱</span><span>🌱</span><span>🌱</span><span>🌱</span></>
+                        ) : growthPct < 60 ? (
+                          <><span>🌿</span><span>🌿</span><span>🌿</span><span>🌿</span><span>🌿</span></>
+                        ) : (
+                          <><span>🌿</span><span>{crop?.icon}</span><span>🌿</span><span>{crop?.icon}</span><span>🌿</span></>
+                        )}
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="relative z-10 w-full bg-stone-800 rounded-full h-2 overflow-hidden">
                         <div
                           className="bg-gradient-to-r from-amber-600 via-emerald-500 to-emerald-400 h-full rounded-full transition-all duration-300"
                           style={{ width: `${growthPct}%` }}
                         />
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="p-6 border-2 border-dashed border-stone-800 rounded-xl text-center mb-4">
-                    <Sprout className="w-8 h-8 text-stone-600 mx-auto mb-2" />
-                    <p className="text-xs text-stone-400">This plot is currently unseeded.</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Action Buttons */}

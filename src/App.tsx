@@ -17,12 +17,18 @@ import { OotpSidebar } from './components/OotpSidebar';
 import { MobileTabBar } from './components/MobileTabBar';
 import { MobileDrawer } from './components/MobileDrawer';
 
+import { VictoryModal } from './components/VictoryModal';
+import { GameOverModal } from './components/GameOverModal';
+
 export const App: React.FC = () => {
   const { gameStarted, activeTab } = useGameStore();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-stone-950">
+      {/* Global Campaign Modals */}
+      <VictoryModal />
+      <GameOverModal />
       {!gameStarted ? (
         <NewGameModal />
       ) : (

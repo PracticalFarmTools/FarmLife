@@ -25,6 +25,8 @@ import {
   Dna,
   Play,
   Cpu,
+  FastForward,
+  X,
 } from 'lucide-react';
 import type { WeatherType } from '../types/game';
 
@@ -40,8 +42,12 @@ export const HeaderNav: React.FC = () => {
     selectedRegion,
     activeTab,
     gameStarted,
+    fastForwardAlert,
     setGameSpeed,
     nextDay,
+    advanceMultipleDays,
+    advanceToNextHarvest,
+    clearFastForwardAlert,
     setActiveTab,
     restartGame,
   } = useGameStore();
@@ -177,10 +183,27 @@ export const HeaderNav: React.FC = () => {
               </button>
               <button
                 onClick={nextDay}
-                className="flex items-center gap-1 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs rounded-lg transition shadow-md cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold text-xs rounded-lg transition cursor-pointer"
+                title="Advance 1 Day"
               >
-                <span>Next Day</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <span>+1D</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => advanceMultipleDays(7)}
+                className="flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-stone-950 font-extrabold text-xs rounded-lg transition shadow-md cursor-pointer"
+                title="Advance 7 Days (Auto-pauses on critical events)"
+              >
+                <FastForward className="w-3 h-3" />
+                <span>+7 Days</span>
+              </button>
+              <button
+                onClick={advanceToNextHarvest}
+                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-stone-950 font-extrabold text-xs rounded-lg transition shadow-md cursor-pointer"
+                title="Advance to Next Crop Harvest (Auto-pauses on ready)"
+              >
+                <Sprout className="w-3 h-3" />
+                <span>To Harvest</span>
               </button>
             </div>
           </div>
@@ -247,19 +270,55 @@ export const HeaderNav: React.FC = () => {
             </button>
             <button
               onClick={() => setGameSpeed(gameSpeed === 1 ? 2 : gameSpeed === 2 ? 5 : 1)}
-              className="px-2.5 py-1.5 rounded-lg bg-stone-800 text-stone-300 font-mono text-[11px] font-bold cursor-pointer min-h-[36px]"
+              className="px-2 py-1.5 rounded-lg bg-stone-800 text-stone-300 font-mono text-[11px] font-bold cursor-pointer min-h-[36px]"
             >
               {gameSpeed === 0 ? '1x' : `${gameSpeed}x`}
             </button>
             <button
               onClick={nextDay}
-              className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 active:bg-amber-500 text-stone-950 font-extrabold text-[11px] rounded-lg shadow cursor-pointer min-h-[36px]"
+              className="flex items-center gap-0.5 px-2 py-1.5 bg-stone-800 active:bg-stone-700 text-stone-200 font-bold text-[11px] rounded-lg cursor-pointer min-h-[36px]"
+              title="Next Day"
             >
-              <span>Next Day</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span>+1D</span>
+              <ChevronRight className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => advanceMultipleDays(7)}
+              className="flex items-center gap-0.5 px-2.5 py-1.5 bg-amber-600 active:bg-amber-500 text-stone-950 font-extrabold text-[11px] rounded-lg shadow cursor-pointer min-h-[36px]"
+              title="Advance 7 Days"
+            >
+              <FastForward className="w-3 h-3" />
+              <span>+7D</span>
+            </button>
+            <button
+              onClick={advanceToNextHarvest}
+              className="flex items-center gap-0.5 px-2 py-1.5 bg-emerald-600 active:bg-emerald-500 text-stone-950 font-extrabold text-[11px] rounded-lg shadow cursor-pointer min-h-[36px]"
+              title="Advance to Harvest"
+            >
+              <Sprout className="w-3 h-3" />
+              <span className="hidden min-[400px]:inline">Harvest</span>
             </button>
           </div>
         </div>
+
+        {/* Fast-Forward Alert / Auto-Pause Banner */}
+        {fastForwardAlert && (
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5 my-1.5 rounded-xl bg-amber-950/90 border border-amber-600/80 text-amber-200 text-xs shadow-lg animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 truncate">
+              <span className="px-1.5 py-0.5 rounded bg-amber-600 text-stone-950 font-black text-[10px] tracking-wider uppercase shrink-0">
+                Paused
+              </span>
+              <span className="font-semibold truncate">{fastForwardAlert}</span>
+            </div>
+            <button
+              onClick={clearFastForwardAlert}
+              className="p-1 rounded hover:bg-amber-900 text-amber-300 hover:text-white cursor-pointer shrink-0"
+              title="Dismiss alert"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* DESKTOP TAB NAVIGATION (HIDDEN ON MOBILE, USES BOTTOM TAB BAR INSTEAD) */}
         <div className="hidden lg:flex items-center gap-1 pt-1 overflow-x-auto no-scrollbar border-t border-stone-800/60">
