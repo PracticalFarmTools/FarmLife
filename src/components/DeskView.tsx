@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { CROPS } from '../data/crops';
 import {
@@ -18,10 +18,14 @@ import {
   Sparkles,
   AlertTriangle,
   Compass,
+  Activity,
+  Droplets,
 } from 'lucide-react';
-import type { WeatherType } from '../types/game';
+import type { WeatherType, AerialLayerMode } from '../types/game';
 
 export const DeskView: React.FC = () => {
+  const [aerialLayer, setAerialLayer] = useState<AerialLayerMode>('rgb');
+
   const {
     cash,
     netWorth,
@@ -155,23 +159,54 @@ export const DeskView: React.FC = () => {
 
       {/* Aerial Farm Parcel Grid Map */}
       <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-800 pb-3">
           <div>
             <h3 className="text-lg font-extrabold text-stone-100 flex items-center gap-2">
               <Compass className="w-5 h-5 text-emerald-400" />
               <span>Aerial Farm Parcel Map</span>
             </h3>
             <p className="text-xs text-stone-400 mt-0.5">
-              Live tactical satellite overview of all active acreage, crops, and soil vitals.
+              Multispectral precision satellite telemetry of all active acreage, canopy vigor, and soil hardpan.
             </p>
           </div>
-          <button
-            onClick={() => setActiveTab('fields')}
-            className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 self-start sm:self-auto cursor-pointer"
-          >
-            <span>Manage All Fields</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </button>
+
+          {/* Multispectral Layer Switcher Bar */}
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-stone-950 rounded-xl border border-stone-800">
+            <button
+              onClick={() => setAerialLayer('rgb')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                aerialLayer === 'rgb' ? 'bg-emerald-600 text-stone-950 shadow' : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <span>🛰️ True Color</span>
+            </button>
+            <button
+              onClick={() => setAerialLayer('ndvi')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                aerialLayer === 'ndvi' ? 'bg-emerald-600 text-stone-950 shadow' : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>NDVI Vigor</span>
+            </button>
+            <button
+              onClick={() => setAerialLayer('compaction')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                aerialLayer === 'compaction' ? 'bg-amber-600 text-stone-950 shadow' : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <span>🚜 Hardpan</span>
+            </button>
+            <button
+              onClick={() => setAerialLayer('moisture')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                aerialLayer === 'moisture' ? 'bg-blue-600 text-stone-950 shadow' : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Droplets className="w-3.5 h-3.5" />
+              <span>Hydration</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
@@ -181,20 +216,43 @@ export const DeskView: React.FC = () => {
             const isReady = field.status === 'ready';
             const isGrowing = field.status === 'growing';
             const growthPct = crop ? Math.min(100, Math.round((field.growthDays / crop.daysToMaturity) * 100)) : 0;
+            const compaction = field.compactionLevel || 0;
+
+            // NDVI calculation
+            let rawNdvi = 0.15;
+            if (crop && (isGrowing || isReady)) {
+              rawNdvi = 0.3 + (growthPct / 100) * 0.55;
+              if (field.activeDiseases.length > 0) rawNdvi -= 0.35;
+              if (field.soil.nitrogen < 30) rawNdvi -= 0.15;
+              if (field.moistureLevel < 25) rawNdvi -= 0.12;
+            }
+            const ndvi = Number(Math.max(0.05, Math.min(0.95, rawNdvi)).toFixed(2));
+
+            // Dynamic styling per layer
+            let cardBg = 'bg-stone-950/80 border-stone-800 hover:border-stone-700';
+            if (aerialLayer === 'ndvi') {
+              if (ndvi >= 0.65) cardBg = 'bg-emerald-950/60 border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.15)]';
+              else if (ndvi >= 0.38) cardBg = 'bg-amber-950/60 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.15)]';
+              else cardBg = 'bg-rose-950/60 border-rose-600 shadow-[0_0_12px_rgba(225,29,72,0.15)]';
+            } else if (aerialLayer === 'compaction') {
+              if (compaction > 50) cardBg = 'bg-rose-950/60 border-rose-600 shadow-[0_0_12px_rgba(225,29,72,0.15)]';
+              else if (compaction > 25) cardBg = 'bg-amber-950/60 border-amber-500';
+              else cardBg = 'bg-emerald-950/40 border-emerald-800/80';
+            } else if (aerialLayer === 'moisture') {
+              if (field.moistureLevel > 85) cardBg = 'bg-blue-950/60 border-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.15)]';
+              else if (field.moistureLevel < 30) cardBg = 'bg-amber-950/60 border-amber-600';
+              else cardBg = 'bg-emerald-950/40 border-emerald-800/80';
+            } else {
+              if (field.activeDiseases.length > 0) cardBg = 'bg-rose-950/40 border-rose-600/80 hover:border-rose-500';
+              else if (isReady) cardBg = 'bg-amber-950/40 border-amber-500/80 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]';
+              else if (isGrowing) cardBg = 'bg-stone-950 border-emerald-800/60 hover:border-emerald-500';
+            }
 
             return (
               <div
                 key={field.id}
                 onClick={() => setActiveTab('fields')}
-                className={`group relative rounded-xl p-3 border transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[130px] overflow-hidden ${
-                  field.activeDiseases.length > 0
-                    ? 'bg-rose-950/40 border-rose-600/80 hover:border-rose-500'
-                    : isReady
-                    ? 'bg-amber-950/40 border-amber-500/80 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
-                    : isGrowing
-                    ? 'bg-stone-950 border-emerald-800/60 hover:border-emerald-500'
-                    : 'bg-stone-950/80 border-stone-800 hover:border-stone-700'
-                }`}
+                className={`group relative rounded-xl p-3 border transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[135px] overflow-hidden ${cardBg}`}
               >
                 {/* Agricultural Furrow Background Grid Texture */}
                 <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(0deg,#15803d,#15803d_2px,transparent_2px,transparent_14px)] pointer-events-none" />
@@ -210,7 +268,43 @@ export const DeskView: React.FC = () => {
 
                 {/* Parcel Center Graphic */}
                 <div className="relative z-10 my-2 flex items-center justify-center text-center">
-                  {crop ? (
+                  {aerialLayer === 'ndvi' ? (
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-mono text-stone-400 block">Canopy Vigor</span>
+                      <strong className={`text-base font-extrabold font-mono block ${
+                        ndvi >= 0.65 ? 'text-emerald-400' : ndvi >= 0.38 ? 'text-amber-400' : 'text-rose-400'
+                      }`}>
+                        NDVI {ndvi}
+                      </strong>
+                      <span className="text-[9px] text-stone-400 block font-mono">
+                        {ndvi >= 0.65 ? 'Dense Biomass' : ndvi >= 0.38 ? 'Moderate Vigor' : 'Stressed / Bare'}
+                      </span>
+                    </div>
+                  ) : aerialLayer === 'compaction' ? (
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-mono text-stone-400 block">Hardpan Plow Sole</span>
+                      <strong className={`text-base font-extrabold font-mono block ${
+                        compaction > 50 ? 'text-rose-400' : compaction > 25 ? 'text-amber-400' : 'text-emerald-400'
+                      }`}>
+                        {compaction}%
+                      </strong>
+                      <span className="text-[9px] text-stone-400 block font-mono">
+                        {compaction > 50 ? 'Root Restricted' : compaction > 25 ? 'Moderate Tilth' : 'Loose Tilth'}
+                      </span>
+                    </div>
+                  ) : aerialLayer === 'moisture' ? (
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-mono text-stone-400 block">Soil Water Content</span>
+                      <strong className={`text-base font-extrabold font-mono block ${
+                        field.moistureLevel < 30 ? 'text-amber-400' : field.moistureLevel > 85 ? 'text-cyan-400' : 'text-blue-400'
+                      }`}>
+                        {field.moistureLevel}%
+                      </strong>
+                      <span className="text-[9px] text-stone-400 block font-mono">
+                        {field.moistureLevel < 30 ? 'Drought Deficit' : field.moistureLevel > 85 ? 'Saturated' : 'Field Capacity'}
+                      </span>
+                    </div>
+                  ) : crop ? (
                     <div className="space-y-0.5">
                       <span className={`text-2xl block ${isReady ? 'animate-bounce' : ''}`}>{crop.icon}</span>
                       <span className="text-[10px] font-bold text-stone-300 truncate max-w-[100px] block mx-auto">

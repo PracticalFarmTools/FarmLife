@@ -37,6 +37,7 @@ export const FieldsView: React.FC = () => {
     installStrawMulch,
     runSoilTest,
     certifyFieldOrganic,
+    runSubsoilerPass,
     buyLand,
   } = useGameStore();
 
@@ -272,6 +273,71 @@ export const FieldsView: React.FC = () => {
                       />
                     </div>
                   </div>
+
+                  {/* Soil Compaction Indicator */}
+                  <div>
+                    <div className="flex justify-between text-stone-300 mb-1">
+                      <span className="flex items-center gap-1 text-stone-400">
+                        <span className="text-xs">🚜</span>
+                        <span>Hardpan Compaction:</span>
+                      </span>
+                      <span
+                        className={`font-mono font-bold text-xs ${
+                          (field.compactionLevel || 0) > 50
+                            ? 'text-rose-400'
+                            : (field.compactionLevel || 0) > 25
+                            ? 'text-amber-400'
+                            : 'text-emerald-400'
+                        }`}
+                      >
+                        {field.compactionLevel || 0}%{' '}
+                        {(field.compactionLevel || 0) > 50
+                          ? '(Root Impeded!)'
+                          : (field.compactionLevel || 0) > 25
+                          ? '(Moderate)'
+                          : '(Optimal Tilth)'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-stone-800 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          (field.compactionLevel || 0) > 50
+                            ? 'bg-rose-500'
+                            : (field.compactionLevel || 0) > 25
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${field.compactionLevel || 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Crop Rotation History & Monoculture Status */}
+                  <div className="pt-2 border-t border-stone-800/80 flex flex-wrap items-center gap-1.5 text-[10px]">
+                    <span className="text-stone-500 font-mono">Rotation:</span>
+                    {field.cropHistory && field.cropHistory.length > 0 ? (
+                      field.cropHistory.slice(0, 3).map((histId, idx) => {
+                        const c = CROPS.find((cr) => cr.id === histId);
+                        return (
+                          <span
+                            key={idx}
+                            className="px-1.5 py-0.5 rounded bg-stone-900 border border-stone-800 text-stone-300 font-mono flex items-center gap-1"
+                          >
+                            <span>{c?.icon || '🌱'}</span>
+                            <span>{c?.name.split(' ')[0] || histId}</span>
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <span className="text-stone-500 italic">Virgin / Resting Soil</span>
+                    )}
+
+                    {field.monoculturePenaltySeasons && field.monoculturePenaltySeasons > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-800 font-bold">
+                        ⚠️ Monoculture Drag (-25% Yield)
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* Visual 2D Agricultural Plot Bed */}
@@ -375,6 +441,20 @@ export const FieldsView: React.FC = () => {
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-2">
+                {isEmpty && (field.compactionLevel || 0) > 0 && (
+                  <button
+                    onClick={() => runSubsoilerPass(field.id)}
+                    disabled={cash < field.acres * 25}
+                    className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                      cash >= field.acres * 25
+                        ? 'bg-amber-950/70 border-amber-800 text-amber-300 hover:bg-amber-900/80 cursor-pointer shadow'
+                        : 'bg-stone-900 border-stone-800 text-stone-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <span>🚜 Run Deep Subsoiler Pass (${(field.acres * 25).toLocaleString()} - Fracture Hardpan)</span>
+                  </button>
+                )}
+
                 {isEmpty && (
                   <button
                     onClick={() => handleOpenPlantWizard(field.id)}
@@ -512,11 +592,36 @@ export const FieldsView: React.FC = () => {
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-3xl">{crop.icon}</span>
-                            {isIdealSeason && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                                Ideal Season ({season})
-                              </span>
-                            )}
+                            <div className="flex flex-col items-end gap-1">
+                              {isIdealSeason && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                  Ideal Season ({season})
+                                </span>
+                              )}
+                              {activeModalField.cropHistory?.[0] && (() => {
+                                const lastC = CROPS.find((c) => c.id === activeModalField.cropHistory![0]);
+                                if (lastC && crop.cropRotationFamily && lastC.cropRotationFamily === crop.cropRotationFamily && !crop.isCoverCrop) {
+                                  return (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800">
+                                      ⚠️ Monoculture (-25%)
+                                    </span>
+                                  );
+                                }
+                                if (lastC?.isNitrogenFixer || lastC?.isCoverCrop) {
+                                  return (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                      🌱 +20 N-Credit
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
+                              {crop.isCoverCrop && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
+                                  ☘️ Bio-Cover Crop
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <h4 className="font-bold text-stone-100 text-sm">{crop.name}</h4>
                           <p className="text-xs text-stone-400 mt-1 line-clamp-2">{crop.description}</p>

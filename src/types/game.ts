@@ -85,6 +85,11 @@ export interface Crop {
   pDepletionPerDay?: number;
   kDepletionPerDay?: number;
   requiresColdStorage?: boolean;
+  cropRotationFamily?: 'Grass' | 'Legume' | 'Solanaceae' | 'Brassicaceae' | 'Cucurbit' | 'Rosaceae' | 'Root' | 'Vitaceae';
+  isNitrogenFixer?: boolean;
+  isCoverCrop?: boolean;
+  isEthyleneEmitter?: boolean;
+  isEthyleneSensitive?: boolean;
   icon: string;
   description: string;
 }
@@ -184,6 +189,8 @@ export interface Field {
   cropHistory?: string[];
   monoculturePenaltySeasons?: number;
   soilType?: 'Sandy Loam' | 'Clay Loam' | 'Silt Loam';
+  compactionLevel?: number;
+  coverCrop?: boolean;
 }
 
 export interface InventoryItem {
@@ -481,3 +488,5 @@ export interface WeatherForecastDay {
 }
 
 export type GameSpeed = 0 | 1 | 2 | 5 | 10;
+
+export type AerialLayerMode = 'rgb' | 'ndvi' | 'compaction' | 'moisture' | 'soilType';

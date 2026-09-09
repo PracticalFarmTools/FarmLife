@@ -146,6 +146,7 @@ interface GameState {
   installStrawMulch: (fieldId: string) => boolean;
   runSoilTest: (fieldId: string) => boolean;
   certifyFieldOrganic: (fieldId: string) => boolean;
+  runSubsoilerPass: (fieldId: string) => boolean;
   buyLand: () => boolean;
 
   // Financials & Banking Actions
@@ -374,6 +375,10 @@ export const useGameStore = create<GameState>()(
       diseasePreventatives: { copperFungicide: false, sulfurOil: false },
       insuranceTier: 'none',
       soilType: (i % 3 === 0 ? 'Silt Loam' : i % 3 === 1 ? 'Sandy Loam' : 'Clay Loam') as 'Silt Loam' | 'Sandy Loam' | 'Clay Loam',
+      compactionLevel: 0,
+      coverCrop: false,
+      cropHistory: [],
+      monoculturePenaltySeasons: 0,
     }));
 
     const initialOpLoan = scen.startingDebt > 0
@@ -444,6 +449,10 @@ export const useGameStore = create<GameState>()(
       diseasePreventatives: { copperFungicide: false, sulfurOil: false },
       insuranceTier: 'none',
       soilType: (i % 3 === 0 ? 'Silt Loam' : i % 3 === 1 ? 'Sandy Loam' : 'Clay Loam') as 'Silt Loam' | 'Sandy Loam' | 'Clay Loam',
+      compactionLevel: 0,
+      coverCrop: false,
+      cropHistory: [],
+      monoculturePenaltySeasons: 0,
     }));
 
     set({
@@ -624,6 +633,24 @@ export const useGameStore = create<GameState>()(
         });
       }
 
+      // --- Nitrate Leaching in Coarse Soils & Torrential Rains ---
+      if ((newWeather === 'Storm' || (newWeather === 'Rainy' && soilType === 'Sandy Loam')) && f.soil.nitrogen > 25) {
+        const leachRate = soilType === 'Sandy Loam' ? 0.35 : 0.15;
+        const leachedAmount = Number((f.soil.nitrogen * leachRate).toFixed(1));
+        f.soil.nitrogen = Math.max(0, Number((f.soil.nitrogen - leachedAmount).toFixed(1)));
+        if (leachedAmount >= 5) {
+          newNotifications.unshift({
+            id: `leach-${Date.now()}-${f.id}`,
+            day: newDay,
+            season: newSeason,
+            year: newYear,
+            type: 'warning',
+            title: `🌧️ Nitrate Leached: ${f.name}`,
+            message: `Heavy rain washed ${leachedAmount} lbs Nitrogen out of ${soilType} root zone!`,
+          });
+        }
+      }
+
       // --- Crop Growth Advancement & Nutrient Consumption ---
       if (f.status === 'growing' && f.currentCropId) {
         const crop = CROPS.find((c) => c.id === f.currentCropId);
@@ -638,6 +665,22 @@ export const useGameStore = create<GameState>()(
             growthMultiplier *= 0.7; // Waterlogging stunt
           } else if (newMoisture >= 45 && newMoisture <= 75) {
             growthMultiplier *= 1.1; // Optimal moisture bonus
+          }
+
+          // Soil compaction root restriction
+          const compaction = f.compactionLevel || 0;
+          if (compaction > 50) {
+            growthMultiplier *= 0.75; // Hardpan restricts root growth
+          }
+
+          // Monoculture drag penalty
+          if (f.monoculturePenaltySeasons && f.monoculturePenaltySeasons > 0) {
+            growthMultiplier *= 0.75; // -25% monoculture penalty
+          }
+
+          // Cover crop tilth loosening
+          if (f.coverCrop) {
+            f.compactionLevel = Math.max(0, (f.compactionLevel || 0) - 2);
           }
 
           const nDep = crop.nDepletionPerDay ?? 1.0;
@@ -1390,9 +1433,63 @@ export const useGameStore = create<GameState>()(
     if (!field || !crop || field.status !== 'empty' || state.cash < crop.seedCostPerAcre * field.acres) return false;
 
     const seedCost = crop.seedCostPerAcre * field.acres;
+    
+    // Check rotation & previous crop benefits
+    let updatedSoil = { ...field.soil };
+    let monoculturePenalty = 0;
+    const history = field.cropHistory || [];
+    const prevCropId = history[0];
+    const prevCrop = prevCropId ? CROPS.find((c) => c.id === prevCropId) : null;
+    
+    // Legume / Cover Crop biological Nitrogen Fixation credit
+    if (prevCrop?.isNitrogenFixer || prevCrop?.isCoverCrop) {
+      const nGain = prevCrop.isCoverCrop ? 35 : 20;
+      updatedSoil.nitrogen = Math.min(100, updatedSoil.nitrogen + nGain);
+      state.notifications.unshift({
+        id: `rot-n-credit-${Date.now()}`,
+        day: state.dayOfYear,
+        season: state.season,
+        year: state.year,
+        type: 'success',
+        title: `🌱 Biological N-Credit: ${field.name}`,
+        message: `Previous ${prevCrop.name} fixed +${nGain} lbs organic Nitrogen into the soil!`,
+      });
+    }
+
+    // Monoculture drag check (same family back-to-back)
+    if (prevCrop && crop.cropRotationFamily && prevCrop.cropRotationFamily === crop.cropRotationFamily && !crop.isCoverCrop) {
+      monoculturePenalty = 2; // -25% yield and increased pathogen pressure for 2 seasons
+      state.notifications.unshift({
+        id: `rot-drag-${Date.now()}`,
+        day: state.dayOfYear,
+        season: state.season,
+        year: state.year,
+        type: 'warning',
+        title: `⚠️ Monoculture Yield Drag: ${field.name}`,
+        message: `Planting ${crop.cropRotationFamily} crops back-to-back triggers soil-borne disease memory & -25% yield drag!`,
+      });
+    }
+
+    const updatedCropHistory = [crop.id, ...history].slice(0, 5);
+
     set({
       cash: Number((state.cash - seedCost).toFixed(2)),
-      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, currentCropId: crop.id, plantedDay: state.dayOfYear, growthDays: 0, status: 'growing' as const } : f)),
+      fields: state.fields.map((f) =>
+        f.id === fieldId
+          ? {
+              ...f,
+              currentCropId: crop.id,
+              plantedDay: state.dayOfYear,
+              growthDays: 0,
+              status: 'growing' as const,
+              soil: updatedSoil,
+              cropHistory: updatedCropHistory,
+              monoculturePenaltySeasons: monoculturePenalty,
+              coverCrop: !!crop.isCoverCrop,
+            }
+          : f
+      ),
+      notifications: [...state.notifications],
     });
     sound.playClick();
     return true;
@@ -1405,6 +1502,46 @@ export const useGameStore = create<GameState>()(
 
     const crop = CROPS.find((c) => c.id === field.currentCropId);
     if (!crop) return false;
+
+    // Cover crop clover termination
+    if (crop.isCoverCrop) {
+      set({
+        fields: state.fields.map((f) =>
+          f.id === fieldId
+            ? {
+                ...f,
+                currentCropId: null,
+                plantedDay: null,
+                growthDays: 0,
+                status: 'empty' as const,
+                coverCrop: false,
+                compactionLevel: Math.max(0, (f.compactionLevel || 0) - 30),
+                soil: { ...f.soil, nitrogen: Math.min(100, f.soil.nitrogen + 25) },
+              }
+            : f
+        ),
+        notifications: [
+          {
+            id: `cover-crimp-${Date.now()}`,
+            day: state.dayOfYear,
+            season: state.season,
+            year: state.year,
+            type: 'success',
+            title: `☘️ Cover Crop Crimped & Incorporated`,
+            message: `Terminated ${crop.name} on ${field.name}. Soil tilth restored, compaction relieved (-30%), and +25 lbs Nitrogen added!`,
+          },
+          ...state.notifications,
+        ],
+      });
+      sound.playHarvest();
+      return true;
+    }
+
+    // Heavy machinery traffic on wet soil causes soil compaction
+    let addedCompaction = 0;
+    if (field.moistureLevel > 70) {
+      addedCompaction = 15;
+    }
 
     const rawYield = field.acres * crop.expectedYieldPerAcre * (field.soilQuality / 100);
     const harvestQuantity = Number(rawYield.toFixed(1));
@@ -1425,15 +1562,80 @@ export const useGameStore = create<GameState>()(
       isOrganic: field.isCertifiedOrganic || false,
     });
 
-    const isWineGrapes = crop.id === 'crop_grapes_wine';
+    const isWineGrapes = crop.id === 'crop_wine_grapes' || crop.id === 'crop_grapes_wine';
     const newWineGrapes = isWineGrapes ? state.wineGrapesHarvested + harvestQuantity : state.wineGrapesHarvested;
 
+    const newNotifications = [...state.notifications];
+    if (addedCompaction > 0) {
+      newNotifications.unshift({
+        id: `compact-harvest-${Date.now()}`,
+        day: state.dayOfYear,
+        season: state.season,
+        year: state.year,
+        type: 'warning',
+        title: `🚜 Soil Compaction Warning: ${field.name}`,
+        message: `Operating combine on wet soil (${field.moistureLevel}% moisture) created plow sole compaction (+15%)! Run a Subsoiler pass before next planting.`,
+      });
+    }
+
     set({
-      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, currentCropId: null, plantedDay: null, growthDays: 0, status: 'empty' as const } : f)),
+      fields: state.fields.map((f) =>
+        f.id === fieldId
+          ? {
+              ...f,
+              currentCropId: null,
+              plantedDay: null,
+              growthDays: 0,
+              status: 'empty' as const,
+              compactionLevel: Math.min(100, (f.compactionLevel || 0) + addedCompaction),
+            }
+          : f
+      ),
       inventory: updatedInventory,
       wineGrapesHarvested: newWineGrapes,
+      notifications: newNotifications,
     });
     sound.playHarvest();
+    return true;
+  },
+
+  runSubsoilerPass: (fieldId: string) => {
+    const state = get();
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || field.status !== 'empty') return false;
+    const cost = field.acres * 25; // $25/acre for tractor diesel and chisel shank wear
+    if (state.cash < cost) return false;
+
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, compactionLevel: 0 } : f)),
+      ledger: [
+        {
+          id: `subsoil-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Deep Subsoiler Shank Pass on ${field.name} (${field.acres} ac) to fracture hardpan`,
+          amount: -cost,
+          category: 'Maintenance',
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ],
+      notifications: [
+        {
+          id: `subsoil-done-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success',
+          title: `🚜 Subsoiling Complete: ${field.name}`,
+          message: `Fractured hardpan compaction down to 0% across ${field.acres} acres! Root penetration and drainage fully restored.`,
+        },
+        ...state.notifications,
+      ],
+    });
+    sound.playTractor();
     return true;
   },
 
@@ -1683,6 +1885,10 @@ export const useGameStore = create<GameState>()(
       diseasePreventatives: { copperFungicide: false, sulfurOil: false },
       insuranceTier: 'none',
       soilType: 'Silt Loam',
+      compactionLevel: 0,
+      coverCrop: false,
+      cropHistory: [],
+      monoculturePenaltySeasons: 0,
     };
 
     set({
