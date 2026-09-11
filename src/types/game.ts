@@ -191,6 +191,7 @@ export interface Field {
   soilType?: 'Sandy Loam' | 'Clay Loam' | 'Silt Loam';
   compactionLevel?: number;
   coverCrop?: boolean;
+  isEnrolledInCrp?: boolean;
 }
 
 export interface InventoryItem {
@@ -344,6 +345,36 @@ export interface FuturesContract {
   fulfilled: boolean;
 }
 
+export interface ForwardContract {
+  id: string;
+  cropId: string;
+  cropName: string;
+  lockedPricePerUnit: number;
+  bushelsTarget: number;
+  fulfilledBushels: number;
+  deadlineSeason: Season;
+  deadlineYear: number;
+  isFulfilled: boolean;
+}
+
+export interface PutOptionContract {
+  id: string;
+  cropId: string;
+  cropName: string;
+  strikePrice: number;
+  premiumPaid: number;
+  quantity: number;
+  expirationSeason: Season;
+  expirationYear: number;
+  isExercised: boolean;
+}
+
+export interface UsdaProgramState {
+  hasEqipGrant: boolean;
+  enrolledCrpFieldIds: string[];
+  crpAnnualRentPerAcre: number;
+}
+
 // Cold Chain & Storage Models
 export type PackingLineType = 'none' | 'manual_shed' | 'automated_optical';
 
@@ -458,7 +489,13 @@ export type LedgerCategory =
   | 'Neighbor AI Farm Acquisition'
   | 'Autonomous License Fee'
   | 'Biological Control'
-  | 'Automation Tech CapEx';
+  | 'Automation Tech CapEx'
+  | 'Forward Contract Delivery'
+  | 'Hedging Premium'
+  | 'Hedging Payout'
+  | 'USDA Cost-Share Grant'
+  | 'USDA CRP Rental Payment'
+  | 'Bulk Input Savings';
 
 export interface LedgerEntry {
   id: string;

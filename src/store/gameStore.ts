@@ -5,6 +5,7 @@ import type {
   DiseaseId,
   Field,
   FertilizerType,
+  ForwardContract,
   FuturesContract,
   GameSpeed,
   GarageLevel,
@@ -20,6 +21,7 @@ import type {
   PackingLineType,
   PermanentStaff,
   PricingStrategy,
+  PutOptionContract,
   Region,
   ScenarioId,
   Season,
@@ -27,6 +29,7 @@ import type {
   SeedVariety,
   StaffRole,
   StorageFacility,
+  UsdaProgramState,
   WeatherForecastDay,
   WeatherType,
   WholesaleContract,
@@ -92,6 +95,9 @@ interface GameState {
   operatingLoan: OperatingLoan | null;
   mortgages: MortgageItem[];
   futuresContracts: FuturesContract[];
+  forwardContracts: ForwardContract[];
+  putOptions: PutOptionContract[];
+  usdaPrograms: UsdaProgramState;
 
   // Storage & Cold Chain
   storageFacility: StorageFacility;
@@ -154,6 +160,14 @@ interface GameState {
   repayOperatingLoan: () => boolean;
   purchaseCropInsurance: (fieldId: string, tier: InsuranceTier) => boolean;
   signFuturesContract: (cropId: string, units: number, pricePerUnit: number) => boolean;
+  signForwardContract: (cropId: string, bushels: number, lockedPrice: number) => boolean;
+  fulfillForwardContract: (contractId: string, bushels: number) => boolean;
+  buyPutOptionFloor: (cropId: string, quantity: number, strikePrice: number, premium: number) => boolean;
+  exercisePutOption: (optionId: string) => boolean;
+  applyForUsdaEqipGrant: () => boolean;
+  enrollFieldInCrp: (fieldId: string) => boolean;
+  withdrawFieldFromCrp: (fieldId: string) => boolean;
+  buyBulkInputsWinterDiscount: (inputType: 'diesel' | 'nitrogen', amount: number) => boolean;
   getDailyBurnRate: () => number;
 
   // Fleet & Machinery Actions
@@ -320,6 +334,13 @@ export const useGameStore = create<GameState>()(
   operatingLoan: null,
   mortgages: [],
   futuresContracts: [],
+  forwardContracts: [],
+  putOptions: [],
+  usdaPrograms: {
+    hasEqipGrant: false,
+    enrolledCrpFieldIds: [],
+    crpAnnualRentPerAcre: 180,
+  },
 
   storageFacility: {
     hasHydrocooler: false,
@@ -398,6 +419,9 @@ export const useGameStore = create<GameState>()(
       cash: scen.startingCash,
       operatingLoan: initialOpLoan,
       fields: initialFields,
+      forwardContracts: [],
+      putOptions: [],
+      usdaPrograms: { hasEqipGrant: false, enrolledCrpFieldIds: [], crpAnnualRentPerAcre: 180 },
       gameStarted: true,
       dayOfYear: 1,
       year: 1,
@@ -461,6 +485,9 @@ export const useGameStore = create<GameState>()(
       cash: 100000,
       operatingLoan: null,
       fields: initialFields,
+      forwardContracts: [],
+      putOptions: [],
+      usdaPrograms: { hasEqipGrant: false, enrolledCrpFieldIds: [], crpAnnualRentPerAcre: 180 },
       gameStarted: true,
       dayOfYear: 1,
       year: 1,
@@ -570,7 +597,7 @@ export const useGameStore = create<GameState>()(
     // ==========================================
     // 1. FIELDS SIMULATION & AGRONOMIC HEARTBEAT
     // ==========================================
-    const updatedFields: Field[] = state.fields.map((field) => {
+    let updatedFields: Field[] = state.fields.map((field) => {
       const f: Field = {
         ...field,
         soil: { ...field.soil },
@@ -1010,6 +1037,113 @@ export const useGameStore = create<GameState>()(
       });
     }
 
+    // ==========================================
+    // 6B. USDA CRP CONSERVATION PAYMENTS & SOIL REGENERATION
+    // ==========================================
+    if (newDay === 360 && state.usdaPrograms.enrolledCrpFieldIds.length > 0) {
+      let totalCrpAcres = 0;
+      updatedFields = updatedFields.map((f) => {
+        if (state.usdaPrograms.enrolledCrpFieldIds.includes(f.id)) {
+          totalCrpAcres += f.acres;
+          return {
+            ...f,
+            soilQuality: Math.min(100, f.soilQuality + 10),
+            soil: {
+              ...f.soil,
+              nitrogen: Math.min(100, f.soil.nitrogen + 15),
+              phosphorus: Math.min(100, f.soil.phosphorus + 10),
+              potassium: Math.min(100, f.soil.potassium + 10),
+            },
+          };
+        }
+        return f;
+      });
+
+      const crpPayment = totalCrpAcres * state.usdaPrograms.crpAnnualRentPerAcre;
+      if (crpPayment > 0) {
+        updatedCash += crpPayment;
+        newLedger.unshift({
+          id: `usda-crp-${Date.now()}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          description: `USDA Conservation Reserve Program (CRP) Annual Rent (${totalCrpAcres} Acres @ $${state.usdaPrograms.crpAnnualRentPerAcre}/ac)`,
+          amount: crpPayment,
+          category: 'USDA CRP Rental Payment',
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        newNotifications.unshift({
+          id: `crp-payment-${Date.now()}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          type: 'success',
+          title: `🌾 USDA CRP Payment Received`,
+          message: `Received $${crpPayment.toLocaleString()} for resting ${totalCrpAcres} acres under conservation stewardship! Soil health boosted by +10.`,
+        });
+      }
+    }
+
+    // ==========================================
+    // 6C. CBOT PUT OPTION EXPIRATION & PRICE FLOOR PAYOUTS
+    // ==========================================
+    const updatedPutOptions: PutOptionContract[] = [];
+    for (const option of state.putOptions) {
+      if (option.isExercised) {
+        updatedPutOptions.push(option);
+        continue;
+      }
+
+      const isExpired = newSeason === option.expirationSeason && newYear >= option.expirationYear;
+      if (isExpired) {
+        const crop = CROPS.find((c) => c.id === option.cropId);
+        const marketMod = state.marketPriceModifiers[option.cropId] || 1.0;
+        const currentSpotPrice = crop ? crop.baseSalePrice * marketMod : option.strikePrice;
+
+        if (currentSpotPrice < option.strikePrice) {
+          const payoutPerUnit = option.strikePrice - currentSpotPrice;
+          const totalPayout = Number((payoutPerUnit * option.quantity).toFixed(2));
+          updatedCash += totalPayout;
+
+          newLedger.unshift({
+            id: `put-payout-${Date.now()}-${option.id}`,
+            day: newDay,
+            season: newSeason,
+            year: newYear,
+            description: `CBOT Put Option Floor Payout for ${option.cropName} ($${option.strikePrice.toFixed(2)} strike vs $${currentSpotPrice.toFixed(2)} spot)`,
+            amount: totalPayout,
+            category: 'Hedging Payout',
+            timestamp: new Date().toLocaleTimeString(),
+          });
+
+          newNotifications.unshift({
+            id: `put-exercised-${Date.now()}-${option.id}`,
+            day: newDay,
+            season: newSeason,
+            year: newYear,
+            type: 'success',
+            title: `📈 Price Floor Hedging Payout!`,
+            message: `Spot price ($${currentSpotPrice.toFixed(2)}) collapsed below your $${option.strikePrice.toFixed(2)} Put strike! Exercised floor protection for +$${totalPayout.toLocaleString()}.`,
+          });
+
+          updatedPutOptions.push({ ...option, isExercised: true });
+        } else {
+          newNotifications.unshift({
+            id: `put-expired-${Date.now()}-${option.id}`,
+            day: newDay,
+            season: newSeason,
+            year: newYear,
+            type: 'info',
+            title: `📉 CBOT Option Expired`,
+            message: `Your $${option.strikePrice.toFixed(2)} Put Option for ${option.cropName} expired out-of-the-money (market was healthy at $${currentSpotPrice.toFixed(2)}).`,
+          });
+          updatedPutOptions.push({ ...option, isExercised: true });
+        }
+      } else {
+        updatedPutOptions.push(option);
+      }
+    }
+
     // Cold Storage Electricity & Outages
     const facility = { ...state.storageFacility };
     if (facility.hasColdStorage) {
@@ -1206,6 +1340,7 @@ export const useGameStore = create<GameState>()(
       storageFacility: facility,
       geneticRnd: rnd,
       inventory: updatedInventory,
+      putOptions: updatedPutOptions,
       notifications: newNotifications.slice(0, 50),
       ledger: newLedger.slice(0, 100),
       isVictory: state.isVictory || victoryTriggered,
@@ -1948,6 +2083,349 @@ export const useGameStore = create<GameState>()(
     return true;
   },
 
+  signForwardContract: (cropId: string, bushels: number, lockedPrice: number) => {
+    const state = get();
+    const crop = CROPS.find((c) => c.id === cropId);
+    if (!crop || bushels <= 0 || lockedPrice <= 0) return false;
+    const contract: ForwardContract = {
+      id: `forward-${Date.now()}`,
+      cropId,
+      cropName: crop.name,
+      lockedPricePerUnit: lockedPrice,
+      bushelsTarget: bushels,
+      fulfilledBushels: 0,
+      deadlineSeason: 'Fall',
+      deadlineYear: state.season === 'Fall' || state.season === 'Winter' ? state.year + 1 : state.year,
+      isFulfilled: false,
+    };
+    set({
+      forwardContracts: [...state.forwardContracts, contract],
+      notifications: [
+        {
+          id: `fwd-sign-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'info' as const,
+          title: `📝 Forward Contract Executed: ${crop.name}`,
+          message: `Locked in delivery of ${bushels.toLocaleString()} bu @ $${lockedPrice.toFixed(2)}/bu to grain elevator. Delivery due by Fall Y${contract.deadlineYear}.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playClick();
+    return true;
+  },
+
+  fulfillForwardContract: (contractId: string, bushels: number) => {
+    const state = get();
+    const contract = state.forwardContracts.find((c) => c.id === contractId);
+    if (!contract || contract.isFulfilled || bushels <= 0) return false;
+
+    const item = state.inventory.find((i) => i.cropId === contract.cropId);
+    if (!item || item.quantity < bushels) return false;
+
+    const remainingTarget = contract.bushelsTarget - contract.fulfilledBushels;
+    const deliverQty = Math.min(bushels, remainingTarget);
+    if (deliverQty <= 0) return false;
+
+    const revenue = Number((deliverQty * contract.lockedPricePerUnit).toFixed(2));
+    const newFulfilled = contract.fulfilledBushels + deliverQty;
+    const isNowDone = newFulfilled >= contract.bushelsTarget;
+
+    const updatedInventory = state.inventory
+      .map((i) => (i.cropId === contract.cropId ? { ...i, quantity: Number((i.quantity - deliverQty).toFixed(1)) } : i))
+      .filter((i) => i.quantity > 0.05);
+
+    const updatedContracts = state.forwardContracts.map((c) =>
+      c.id === contractId ? { ...c, fulfilledBushels: newFulfilled, isFulfilled: isNowDone } : c
+    );
+
+    set({
+      cash: Number((state.cash + revenue).toFixed(2)),
+      inventory: updatedInventory,
+      forwardContracts: updatedContracts,
+      ledger: [
+        {
+          id: `fwd-ful-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Forward Contract Delivery: ${deliverQty} bu ${contract.cropName} @ $${contract.lockedPricePerUnit.toFixed(2)}/bu`,
+          amount: revenue,
+          category: 'Forward Contract Delivery' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `fwd-delivered-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `🚚 Forward Delivery Complete`,
+          message: `Delivered ${deliverQty} bu to elevator for +$${revenue.toLocaleString()}! ${isNowDone ? 'Contract fully satisfied.' : `${contract.bushelsTarget - newFulfilled} bu remaining.`}`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
+  buyPutOptionFloor: (cropId: string, quantity: number, strikePrice: number, premium: number) => {
+    const state = get();
+    if (state.cash < premium || quantity <= 0 || premium <= 0) return false;
+    const crop = CROPS.find((c) => c.id === cropId);
+    const option: PutOptionContract = {
+      id: `put-${Date.now()}`,
+      cropId,
+      cropName: crop ? crop.name : cropId,
+      strikePrice,
+      premiumPaid: premium,
+      quantity,
+      expirationSeason: 'Fall',
+      expirationYear: state.season === 'Fall' || state.season === 'Winter' ? state.year + 1 : state.year,
+      isExercised: false,
+    };
+    set({
+      cash: Number((state.cash - premium).toFixed(2)),
+      putOptions: [...state.putOptions, option],
+      ledger: [
+        {
+          id: `put-prem-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `CBOT Put Option Premium: ${quantity} units ${option.cropName} ($${strikePrice.toFixed(2)} floor)`,
+          amount: -premium,
+          category: 'Hedging Premium' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `put-bought-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'info' as const,
+          title: `🛡️ CBOT Price Floor Acquired`,
+          message: `Purchased Put Option for ${option.cropName}: Guaranteed $${strikePrice.toFixed(2)} floor on ${quantity} units through Fall Y${option.expirationYear}.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
+  exercisePutOption: (optionId: string) => {
+    const state = get();
+    const option = state.putOptions.find((o) => o.id === optionId);
+    if (!option || option.isExercised) return false;
+
+    const crop = CROPS.find((c) => c.id === option.cropId);
+    const mod = state.marketPriceModifiers[option.cropId] || 1.0;
+    const spotPrice = crop ? crop.baseSalePrice * mod : option.strikePrice;
+
+    if (spotPrice >= option.strikePrice) return false;
+
+    const payoutPerUnit = option.strikePrice - spotPrice;
+    const totalPayout = Number((payoutPerUnit * option.quantity).toFixed(2));
+
+    set({
+      cash: Number((state.cash + totalPayout).toFixed(2)),
+      putOptions: state.putOptions.map((o) => (o.id === optionId ? { ...o, isExercised: true } : o)),
+      ledger: [
+        {
+          id: `put-ex-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Exercised Put Option for ${option.cropName} ($${option.strikePrice.toFixed(2)} strike vs $${spotPrice.toFixed(2)} spot)`,
+          amount: totalPayout,
+          category: 'Hedging Payout' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `put-ex-notif-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `💰 Price Floor Exercised!`,
+          message: `Exercised floor on ${option.cropName} against spot crash. Received net hedge payout of +$${totalPayout.toLocaleString()}.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
+  applyForUsdaEqipGrant: () => {
+    const state = get();
+    if (state.usdaPrograms.hasEqipGrant) return false;
+    const totalAcres = state.fields.reduce((sum, f) => sum + f.acres, 0);
+    if (totalAcres < 15) return false;
+
+    const grantAmount = 15000;
+    set({
+      cash: Number((state.cash + grantAmount).toFixed(2)),
+      usdaPrograms: { ...state.usdaPrograms, hasEqipGrant: true },
+      ledger: [
+        {
+          id: `eqip-grant-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `USDA NRCS Environmental Quality Incentives Program (EQIP) Cost-Share Grant`,
+          amount: grantAmount,
+          category: 'USDA Cost-Share Grant' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `eqip-approved-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `🏛️ USDA EQIP Grant Approved!`,
+          message: `Your conservation stewardship plan qualified for a $15,000 cost-share grant for high-efficiency irrigation and nutrient management.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
+  enrollFieldInCrp: (fieldId: string) => {
+    const state = get();
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || field.status !== 'empty' || state.usdaPrograms.enrolledCrpFieldIds.includes(fieldId)) return false;
+
+    set({
+      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, isEnrolledInCrp: true } : f)),
+      usdaPrograms: {
+        ...state.usdaPrograms,
+        enrolledCrpFieldIds: [...state.usdaPrograms.enrolledCrpFieldIds, fieldId],
+      },
+      notifications: [
+        {
+          id: `crp-enrolled-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'info' as const,
+          title: `🌾 Enrolled in USDA CRP: ${field.name}`,
+          message: `Enrolled ${field.acres} acres into conservation reserve. Field generates $${(field.acres * state.usdaPrograms.crpAnnualRentPerAcre).toLocaleString()}/yr rent on Day 360 and restores soil tilth.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playClick();
+    return true;
+  },
+
+  withdrawFieldFromCrp: (fieldId: string) => {
+    const state = get();
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || !state.usdaPrograms.enrolledCrpFieldIds.includes(fieldId)) return false;
+
+    set({
+      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, isEnrolledInCrp: false } : f)),
+      usdaPrograms: {
+        ...state.usdaPrograms,
+        enrolledCrpFieldIds: state.usdaPrograms.enrolledCrpFieldIds.filter((id) => id !== fieldId),
+      },
+      notifications: [
+        {
+          id: `crp-withdrawn-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'info' as const,
+          title: `🚜 Withdrawn from CRP: ${field.name}`,
+          message: `Field returned to active row-crop cultivation. USDA annual rental disbursements ceased for this parcel.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playClick();
+    return true;
+  },
+
+  buyBulkInputsWinterDiscount: (inputType: 'diesel' | 'nitrogen', amount: number) => {
+    const state = get();
+    if (state.season !== 'Winter') return false;
+    const costPerUnit = inputType === 'diesel' ? 2.85 : 30;
+    const standardCostPerUnit = inputType === 'diesel' ? 3.80 : 40;
+    const totalCost = Number((costPerUnit * amount).toFixed(2));
+    const savings = Number(((standardCostPerUnit - costPerUnit) * amount).toFixed(2));
+
+    if (state.cash < totalCost) return false;
+
+    let updatedFields = state.fields;
+    let updatedFleet = state.fleet;
+
+    if (inputType === 'nitrogen') {
+      const nPerField = Math.round(amount / Math.max(1, state.fields.length));
+      updatedFields = state.fields.map((f) => ({
+        ...f,
+        soil: { ...f.soil, nitrogen: Math.min(100, f.soil.nitrogen + nPerField) },
+      }));
+    } else {
+      updatedFleet = state.fleet.map((m) => ({
+        ...m,
+        condition: Math.min(100, m.condition + 20),
+      }));
+    }
+
+    set({
+      cash: Number((state.cash - totalCost).toFixed(2)),
+      fields: updatedFields,
+      fleet: updatedFleet,
+      ledger: [
+        {
+          id: `bulk-input-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Winter Bulk Prepay: ${amount} units of ${inputType === 'diesel' ? 'Off-Road Red Diesel' : 'Urea Nitrogen 46-0-0'} (Saved $${savings.toLocaleString()})`,
+          amount: -totalCost,
+          category: 'Bulk Input Savings' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `bulk-bought-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `❄️ Winter Prepay Locked In!`,
+          message: `Acquired ${amount} units of ${inputType} at 25% off-season discount, saving $${savings.toLocaleString()} in operational input CapEx!`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
   hirePermanentStaff: (role: StaffRole) => {
     const state = get();
     const target = state.staff.find((s) => s.role === role);
@@ -2274,6 +2752,13 @@ export const useGameStore = create<GameState>()(
       operatingLoan: null,
       mortgages: [],
       futuresContracts: [],
+      forwardContracts: [],
+      putOptions: [],
+      usdaPrograms: {
+        hasEqipGrant: false,
+        enrolledCrpFieldIds: [],
+        crpAnnualRentPerAcre: 180,
+      },
       storageFacility: {
         hasHydrocooler: false,
         hasColdStorage: false,
@@ -2334,6 +2819,9 @@ export const useGameStore = create<GameState>()(
         operatingLoan: state.operatingLoan,
         mortgages: state.mortgages,
         futuresContracts: state.futuresContracts,
+        forwardContracts: state.forwardContracts,
+        putOptions: state.putOptions,
+        usdaPrograms: state.usdaPrograms,
         storageFacility: state.storageFacility,
         seedCatalog: state.seedCatalog,
         geneticRnd: state.geneticRnd,
