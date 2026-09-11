@@ -385,6 +385,10 @@ export interface StorageFacility {
   packingLine: PackingLineType;
   coldStorageTemp: number;
   isPowerOutage: boolean;
+  hasEthyleneScrubber: boolean;
+  isGapCertified: boolean;
+  lastWaterTestDay: number | null;
+  lastWaterTestYear: number | null;
 }
 
 // Seed Genetics & R&D Models
@@ -495,7 +499,10 @@ export type LedgerCategory =
   | 'Hedging Payout'
   | 'USDA Cost-Share Grant'
   | 'USDA CRP Rental Payment'
-  | 'Bulk Input Savings';
+  | 'Bulk Input Savings'
+  | 'GAP Water Test'
+  | 'Ethylene Scrubber Upgrade'
+  | 'Food Safety Audit';
 
 export interface LedgerEntry {
   id: string;

@@ -140,6 +140,8 @@ interface GameState {
   upgradePackingLine: (line: PackingLineType) => boolean;
   hydrocoolInventoryItem: (itemId: string) => boolean;
   bookThirdPartyFreight: (contractId: string, quantity: number) => boolean;
+  installEthyleneScrubber: () => boolean;
+  performGapWaterTest: () => boolean;
 
   // Field & Agronomy Operations
   plantCrop: (fieldId: string, cropId: string) => boolean;
@@ -349,6 +351,10 @@ export const useGameStore = create<GameState>()(
     packingLine: 'none',
     coldStorageTemp: 34,
     isPowerOutage: false,
+    hasEthyleneScrubber: false,
+    isGapCertified: false,
+    lastWaterTestDay: null,
+    lastWaterTestYear: null,
   },
 
   seedCatalog: SEED_CATALOG,
@@ -1170,6 +1176,77 @@ export const useGameStore = create<GameState>()(
       }
     }
 
+    // ==========================================
+    // 6D. ETHYLENE CROSS-CONTAMINATION & SPOILAGE DYNAMICS
+    // ==========================================
+    const hasEthyleneEmitters = state.inventory.some((item) => {
+      const c = CROPS.find((cr) => cr.id === item.cropId);
+      return c?.isEthyleneEmitter;
+    });
+    const hasEthyleneSensitive = state.inventory.some((item) => {
+      const c = CROPS.find((cr) => cr.id === item.cropId);
+      return c?.isEthyleneSensitive;
+    });
+    const ethyleneRiskActive = hasEthyleneEmitters && hasEthyleneSensitive && !facility.hasEthyleneScrubber;
+
+    if (ethyleneRiskActive && newDay % 30 === 1) {
+      newNotifications.unshift({
+        id: `ethylene-warn-${Date.now()}`,
+        day: newDay,
+        season: newSeason,
+        year: newYear,
+        type: 'warning' as const,
+        title: '⚠️ Ethylene Cross-Contamination Alert!',
+        message: 'High-ethylene emitters (Apples, Tomatoes, Wine Grapes) stored alongside sensitive greens! Spoilage accelerated 3×. Install Potassium Permanganate Scrubbers.',
+      });
+    }
+
+    // GAP 90-Day Water Audit Lapsing
+    if (facility.isGapCertified) {
+      const daysSinceWaterTest =
+        facility.lastWaterTestDay !== null
+          ? (newYear - (facility.lastWaterTestYear || newYear)) * 365 + (newDay - facility.lastWaterTestDay)
+          : 999;
+      if (daysSinceWaterTest > 90) {
+        facility.isGapCertified = false;
+        newNotifications.unshift({
+          id: `gap-lapsed-${Date.now()}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          type: 'warning' as const,
+          title: '⚠️ GAP Certification Lapsed!',
+          message: 'Quarterly 90-day agricultural water microbial audit is overdue. Certified wholesale buyer premiums suspended until new well test is conducted.',
+        });
+      }
+    } else {
+      // Uncertified risk when holding leafy greens
+      const hasGreens = state.inventory.some((i) => i.cropId === 'crop_lettuce_romaine');
+      if (hasGreens && Math.random() < 0.015) {
+        const fine = 2500;
+        updatedCash = Number((updatedCash - fine).toFixed(2));
+        newLedger.unshift({
+          id: `fda-fine-${Date.now()}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          description: 'FDA Food Safety Compliance Fine (Uncertified Agricultural Water on Leafy Greens)',
+          amount: -fine,
+          category: 'Food Safety Audit' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        newNotifications.unshift({
+          id: `fda-notif-${Date.now()}`,
+          day: newDay,
+          season: newSeason,
+          year: newYear,
+          type: 'error' as const,
+          title: '📋 FDA Food Safety Warning & Fine',
+          message: 'Marketed romaine lettuce without certified agricultural water tests! Assessed $2,500 compliance fine. Conduct a GAP well water test in the Barn.',
+        });
+      }
+    }
+
     // Daily Spoilage Decay
     let updatedInventory = [...state.inventory];
     let totalDailySalesRevenue = 0;
@@ -1186,6 +1263,7 @@ export const useGameStore = create<GameState>()(
           let baseSpoilageRate = crop.spoilageRatePerDay;
           if (item.hasFieldHeat && !item.isHydrocooled) baseSpoilageRate *= 2.0;
           if (facility.hasColdStorage && !facility.isPowerOutage) baseSpoilageRate *= 0.2;
+          if (ethyleneRiskActive && crop.isEthyleneSensitive) baseSpoilageRate *= 3.0;
 
           const spoiledAmount = Math.min(currentQty, currentQty * baseSpoilageRate);
           currentQty -= spoiledAmount;
@@ -1195,8 +1273,9 @@ export const useGameStore = create<GameState>()(
           PRICING_STRATEGIES.find((s) => s.id === item.pricingStrategy) || PRICING_STRATEGIES[1];
         const marketMod = state.marketPriceModifiers[item.cropId] || 1.0;
         const organicBonus = item.isOrganic ? 1.8 : 1.0;
+        const gradeBonus = item.grade === 'A' ? 1.4 : item.grade === 'B' ? 1.0 : 0.35;
         const unitRetailPrice =
-          crop.baseSalePrice * marketMod * organicBonus * (1 + strategyConfig.markupPct / 100);
+          crop.baseSalePrice * marketMod * organicBonus * gradeBonus * (1 + strategyConfig.markupPct / 100);
 
         const baseDailyShoppers = 15 * state.farmstandLevel + Math.floor(Math.random() * 10);
         const unitsSold = Math.min(
@@ -1561,6 +1640,84 @@ export const useGameStore = create<GameState>()(
     return true;
   },
 
+  installEthyleneScrubber: () => {
+    const state = get();
+    if (state.storageFacility.hasEthyleneScrubber || state.cash < 3500) return false;
+    set({
+      cash: Number((state.cash - 3500).toFixed(2)),
+      storageFacility: { ...state.storageFacility, hasEthyleneScrubber: true },
+      ledger: [
+        {
+          id: `scrubber-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: 'Installed Potassium Permanganate Ethylene Gas Scrubbers',
+          amount: -3500,
+          category: 'Ethylene Scrubber Upgrade' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `scrubber-notif-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: '🍇 Ethylene Scrubbers Installed',
+          message: 'Potassium permanganate filtration active. Ethylene gas from apples and tomatoes will no longer catalyze decay in adjacent leafy greens!',
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
+  performGapWaterTest: () => {
+    const state = get();
+    const cost = 450;
+    if (state.cash < cost) return false;
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      storageFacility: {
+        ...state.storageFacility,
+        isGapCertified: true,
+        lastWaterTestDay: state.dayOfYear,
+        lastWaterTestYear: state.year,
+      },
+      ledger: [
+        {
+          id: `gap-test-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: 'Quarterly Agricultural Well Water Microbial Audit (E. coli & Coliforms)',
+          amount: -cost,
+          category: 'GAP Water Test' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `gap-pass-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: '💧 GAP Water Audit Passed!',
+          message: 'Certified 0 MPN/100mL generic E. coli in agricultural irrigation source! GAP certification active for 90 days (+25% wholesale buyer premiums unlocked).',
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
   plantCrop: (fieldId: string, cropId: string) => {
     const state = get();
     const field = state.fields.find((f) => f.id === fieldId);
@@ -1681,33 +1838,89 @@ export const useGameStore = create<GameState>()(
     const rawYield = field.acres * crop.expectedYieldPerAcre * (field.soilQuality / 100);
     const harvestQuantity = Number(rawYield.toFixed(1));
 
+    // Optical Sorter & Packing Line Grading Distribution
+    let gradeAPct = 0.20;
+    let gradeBPct = 0.50;
+    let gradeCPct = 0.30;
+    if (state.storageFacility.packingLine === 'automated_optical') {
+      gradeAPct = 0.70;
+      gradeBPct = 0.25;
+      gradeCPct = 0.05;
+    } else if (state.storageFacility.packingLine === 'manual_shed') {
+      gradeAPct = 0.45;
+      gradeBPct = 0.40;
+      gradeCPct = 0.15;
+    }
+
+    const gradeAQty = Number((harvestQuantity * gradeAPct).toFixed(1));
+    const gradeBQty = Number((harvestQuantity * gradeBPct).toFixed(1));
+    const gradeCQty = Number((harvestQuantity * gradeCPct).toFixed(1));
+
     const updatedInventory = [...state.inventory];
-    updatedInventory.push({
-      id: `inv-${Date.now()}`,
+    const baseInvItem = {
       cropId: crop.id,
       cropName: crop.name,
-      quantity: harvestQuantity,
       quality: field.soilQuality,
       harvestDay: state.dayOfYear,
       daysInStorage: 0,
-      pricingStrategy: 'standard',
+      pricingStrategy: 'standard' as const,
       hasFieldHeat: true,
       isHydrocooled: false,
-      grade: 'A',
       isOrganic: field.isCertifiedOrganic || false,
-    });
+    };
+
+    if (gradeAQty > 0) {
+      updatedInventory.push({
+        ...baseInvItem,
+        id: `inv-${Date.now()}-A`,
+        quantity: gradeAQty,
+        grade: 'A' as const,
+      });
+    }
+    if (gradeBQty > 0) {
+      updatedInventory.push({
+        ...baseInvItem,
+        id: `inv-${Date.now()}-B`,
+        quantity: gradeBQty,
+        grade: 'B' as const,
+      });
+    }
+    if (gradeCQty > 0) {
+      updatedInventory.push({
+        ...baseInvItem,
+        id: `inv-${Date.now()}-C`,
+        quantity: gradeCQty,
+        grade: 'C' as const,
+      });
+    }
 
     const isWineGrapes = crop.id === 'crop_wine_grapes' || crop.id === 'crop_grapes_wine';
     const newWineGrapes = isWineGrapes ? state.wineGrapesHarvested + harvestQuantity : state.wineGrapesHarvested;
 
     const newNotifications = [...state.notifications];
+    newNotifications.unshift({
+      id: `harvest-${Date.now()}`,
+      day: state.dayOfYear,
+      season: state.season,
+      year: state.year,
+      type: 'success' as const,
+      title: `🌾 Packhouse Graded: ${crop.name}`,
+      message: `Harvested ${harvestQuantity} bu from ${field.name}! Graded via ${
+        state.storageFacility.packingLine === 'automated_optical'
+          ? 'Optical Laser Line'
+          : state.storageFacility.packingLine === 'manual_shed'
+          ? 'Manual Packing Shed'
+          : 'Field Run'
+      }: ${gradeAQty} bu Grade A (+40% Premium), ${gradeBQty} bu Grade B, ${gradeCQty} bu Culls.`,
+    });
+
     if (addedCompaction > 0) {
       newNotifications.unshift({
         id: `compact-harvest-${Date.now()}`,
         day: state.dayOfYear,
         season: state.season,
         year: state.year,
-        type: 'warning',
+        type: 'warning' as const,
         title: `🚜 Soil Compaction Warning: ${field.name}`,
         message: `Operating combine on wet soil (${field.moistureLevel}% moisture) created plow sole compaction (+15%)! Run a Subsoiler pass before next planting.`,
       });
@@ -2536,8 +2749,18 @@ export const useGameStore = create<GameState>()(
     const state = get();
     const item = state.inventory.find((i) => i.cropId === cropId);
     if (!item || item.quantity < quantity) return false;
-    const rev = Number((quantity * 10).toFixed(2));
-    set({ cash: Number((state.cash + rev).toFixed(2)), inventory: state.inventory.map((i) => (i.cropId === cropId ? { ...i, quantity: i.quantity - quantity } : i)).filter((i) => i.quantity > 0.1) });
+    const crop = CROPS.find((c) => c.id === cropId);
+    const basePrice = crop ? crop.baseSalePrice : 10;
+    const marketMod = state.marketPriceModifiers[cropId] || 1.0;
+    const gradeMod = item.grade === 'A' ? 1.4 : item.grade === 'B' ? 1.0 : 0.35;
+    const organicMod = item.isOrganic ? 1.8 : 1.0;
+    const rev = Number((quantity * basePrice * marketMod * gradeMod * organicMod * 0.80).toFixed(2));
+    set({
+      cash: Number((state.cash + rev).toFixed(2)),
+      inventory: state.inventory
+        .map((i) => (i.id === item.id ? { ...i, quantity: i.quantity - quantity } : i))
+        .filter((i) => i.quantity > 0.05),
+    });
     sound.playCashRegister();
     return true;
   },
@@ -2546,7 +2769,8 @@ export const useGameStore = create<GameState>()(
     const state = get();
     const contract = state.wholesaleContracts.find((c) => c.id === contractId);
     if (!contract) return false;
-    const rev = Number((quantity * contract.contractPricePerUnit).toFixed(2));
+    const gapBonus = state.storageFacility.isGapCertified ? 1.25 : 1.0;
+    const rev = Number((quantity * contract.contractPricePerUnit * gapBonus).toFixed(2));
     set({
       cash: Number((state.cash + rev).toFixed(2)),
       wholesaleContracts: state.wholesaleContracts.map((c) =>
@@ -2766,6 +2990,10 @@ export const useGameStore = create<GameState>()(
         packingLine: 'none',
         coldStorageTemp: 34,
         isPowerOutage: false,
+        hasEthyleneScrubber: false,
+        isGapCertified: false,
+        lastWaterTestDay: null,
+        lastWaterTestYear: null,
       },
       seedCatalog: SEED_CATALOG,
       geneticRnd: {
