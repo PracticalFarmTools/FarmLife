@@ -17,6 +17,9 @@ import {
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
+  Wind,
+  Shield,
+  Flame,
 } from 'lucide-react';
 import type { DiseaseId, FertilizerType } from '../types/game';
 
@@ -38,6 +41,9 @@ export const FieldsView: React.FC = () => {
     runSoilTest,
     certifyFieldOrganic,
     runSubsoilerPass,
+    installFrostFans,
+    installHailNetting,
+    deployFrostDefensePass,
     buyLand,
   } = useGameStore();
 
@@ -48,10 +54,12 @@ export const FieldsView: React.FC = () => {
 
   const [fertilizerModalFieldId, setFertilizerModalFieldId] = useState<string | null>(null);
   const [diseaseModalFieldId, setDiseaseModalFieldId] = useState<string | null>(null);
+  const [defenseModalFieldId, setDefenseModalFieldId] = useState<string | null>(null);
 
   const activeModalField = fields.find((f) => f.id === selectedFieldId);
   const activeFertilizerField = fields.find((f) => f.id === fertilizerModalFieldId);
   const activeDiseaseField = fields.find((f) => f.id === diseaseModalFieldId);
+  const activeDefenseField = fields.find((f) => f.id === defenseModalFieldId);
 
   const handleOpenPlantWizard = (fieldId: string) => {
     setSelectedFieldId(fieldId);
@@ -124,6 +132,16 @@ export const FieldsView: React.FC = () => {
                     <h3 className="font-extrabold text-lg text-stone-100">{field.name}</h3>
                     <div className="flex items-center gap-2 text-xs font-mono text-stone-400">
                       <span>{field.acres} Acres</span>
+                      {field.hasFrostFans && (
+                        <span className="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] font-bold">
+                          🌬️ Wind Tower
+                        </span>
+                      )}
+                      {field.hasHailNetting && (
+                        <span className="px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px] font-bold">
+                          🛡️ Hail Net
+                        </span>
+                      )}
                       {field.hasDripIrrigation && (
                         <span className="px-1.5 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800 text-[10px]">
                           💧 Drip Line
@@ -525,6 +543,14 @@ export const FieldsView: React.FC = () => {
                     <span>Lab Test ($150)</span>
                   </button>
                 </div>
+
+                <button
+                  onClick={() => setDefenseModalFieldId(field.id)}
+                  className="w-full py-1.5 px-2 rounded-lg bg-stone-950 hover:bg-stone-850 border border-stone-800 text-cyan-300 font-semibold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Wind className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Climate Defense & Canopy (Fans, Hail Net, Heat)</span>
+                </button>
               </div>
             </div>
           );
@@ -959,6 +985,198 @@ export const FieldsView: React.FC = () => {
                 </p>
                 <span className="block mt-2 font-mono text-xs font-bold text-amber-400">$200</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CLIMATE & CANOPY DEFENSE MODAL */}
+      {defenseModalFieldId && activeDefenseField && (
+        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="max-w-3xl w-full bg-stone-900 border border-stone-800 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-hidden my-auto max-h-[94vh] flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-800 mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-stone-100 flex items-center gap-2">
+                  <Shield className="w-6 h-6 text-cyan-400" />
+                  <span>Climate & Canopy Defense Infrastructure ({activeDefenseField.name})</span>
+                </h3>
+                <p className="text-xs text-stone-400">
+                  Protect standing crops against radiation frost blossom kill and high-impact hailstorm lodging.
+                </p>
+              </div>
+              <button
+                onClick={() => setDefenseModalFieldId(null)}
+                className="text-stone-400 hover:text-stone-200 text-sm font-bold px-3 py-1 rounded bg-stone-800 cursor-pointer"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-1">
+              {/* Orchard Wind Machine Tower */}
+              <div className="p-4 bg-stone-950/80 border border-stone-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🌬️</span>
+                    <h4 className="font-bold text-stone-100 text-sm">Orchard Wind Machine Tower</h4>
+                    {activeDefenseField.hasFrostFans ? (
+                      <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] font-bold">
+                        ✓ INSTALLED & ARMED
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-stone-900 text-stone-400 border border-stone-800 text-[10px]">
+                        Permanent Infrastructure
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-stone-400">
+                    High-mast propane propeller pulls down warmer thermal inversion air layer, elevating ground temperatures 3°F-5°F. Protects tender blossoms down to 26°F against radiation frost (-80% crop stunt mitigation).
+                  </p>
+                </div>
+                <div className="shrink-0 w-full sm:w-auto">
+                  {activeDefenseField.hasFrostFans ? (
+                    <button
+                      disabled
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-cyan-950 text-cyan-400 border border-cyan-800 font-bold text-xs cursor-default"
+                    >
+                      Active & Protected
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => installFrostFans(activeDefenseField.id)}
+                      disabled={cash < 4500}
+                      className={`w-full sm:w-auto px-4 py-2 rounded-xl font-bold text-xs shadow transition cursor-pointer ${
+                        cash >= 4500
+                          ? 'bg-cyan-600 hover:bg-cyan-500 text-stone-950'
+                          : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Install Tower ($4,500)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* High-Tensile Poly Hail Netting Canopy */}
+              <div className="p-4 bg-stone-950/80 border border-stone-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🛡️</span>
+                    <h4 className="font-bold text-stone-100 text-sm">High-Tensile Poly Hail Netting Canopy</h4>
+                    {activeDefenseField.hasHailNetting ? (
+                      <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px] font-bold">
+                        ✓ INSTALLED & ANCHORED
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-stone-900 text-stone-400 border border-stone-800 text-[10px]">
+                        Permanent Infrastructure
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-stone-400">
+                    Suspended overhead high-density polyethylene netting. Intercepts storm hailstones and breaks kinetic velocity, preventing severe canopy stripping and lodging during severe summer thunderstorms.
+                  </p>
+                </div>
+                <div className="shrink-0 w-full sm:w-auto">
+                  {activeDefenseField.hasHailNetting ? (
+                    <button
+                      disabled
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800 font-bold text-xs cursor-default"
+                    >
+                      Canopy Anchored
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => installHailNetting(activeDefenseField.id)}
+                      disabled={cash < 2000}
+                      className={`w-full sm:w-auto px-4 py-2 rounded-xl font-bold text-xs shadow transition cursor-pointer ${
+                        cash >= 2000
+                          ? 'bg-indigo-600 hover:bg-indigo-500 text-stone-950'
+                          : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Install Canopy ($2,000)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Emergency Mobile Thermal Smudge Pots */}
+              <div className="p-4 bg-stone-950/80 border border-stone-800 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🔥</span>
+                    <h4 className="font-bold text-stone-100 text-sm">Emergency Thermal Smudge Pots & Under-Tree Sprinklers</h4>
+                    <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px]">
+                      Single-Night Deployable
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-400">
+                    Deploy mobile orchard smudge pots and run micro-sprinklers across the parcel. Water freezing on plant tissue releases the latent heat of fusion (80 cal/gram), forming a protective thermal ice blanket.
+                  </p>
+                </div>
+                <div className="shrink-0 w-full sm:w-auto">
+                  <button
+                    onClick={() => deployFrostDefensePass(activeDefenseField.id)}
+                    disabled={cash < 300}
+                    className={`w-full sm:w-auto px-4 py-2 rounded-xl font-bold text-xs shadow transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                      cash >= 300
+                        ? 'bg-amber-600 hover:bg-amber-500 text-stone-950'
+                        : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Flame className="w-3.5 h-3.5" />
+                    <span>Deploy Pass ($300)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Drip Irrigation & Straw Mulch quick access */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="p-3.5 bg-stone-950 rounded-xl border border-stone-800 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-xs font-bold text-blue-400">💧 Subsurface Drip Irrigation</h5>
+                    <p className="text-[10px] text-stone-400 mt-0.5">Eliminates moisture evaporation loss</p>
+                  </div>
+                  {activeDefenseField.hasDripIrrigation ? (
+                    <span className="text-xs font-bold text-blue-400">Installed</span>
+                  ) : (
+                    <button
+                      onClick={() => installDripIrrigation(activeDefenseField.id)}
+                      disabled={cash < 1200}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        cash >= 1200
+                          ? 'bg-blue-600 hover:bg-blue-500 text-stone-950'
+                          : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Install ($1,200)
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-3.5 bg-stone-950 rounded-xl border border-stone-800 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-xs font-bold text-amber-400">🌾 Organic Straw Mulch</h5>
+                    <p className="text-[10px] text-stone-400 mt-0.5">Prevents rain splash soil pathogens</p>
+                  </div>
+                  {activeDefenseField.hasStrawMulch ? (
+                    <span className="text-xs font-bold text-amber-400">Applied</span>
+                  ) : (
+                    <button
+                      onClick={() => installStrawMulch(activeDefenseField.id)}
+                      disabled={cash < 200}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        cash >= 200
+                          ? 'bg-amber-600 hover:bg-amber-500 text-stone-950'
+                          : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Apply ($200)
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

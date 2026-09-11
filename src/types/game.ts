@@ -192,6 +192,8 @@ export interface Field {
   compactionLevel?: number;
   coverCrop?: boolean;
   isEnrolledInCrp?: boolean;
+  hasFrostFans?: boolean;
+  hasHailNetting?: boolean;
 }
 
 export interface InventoryItem {
@@ -502,7 +504,10 @@ export type LedgerCategory =
   | 'Bulk Input Savings'
   | 'GAP Water Test'
   | 'Ethylene Scrubber Upgrade'
-  | 'Food Safety Audit';
+  | 'Food Safety Audit'
+  | 'Machinery Trade-In'
+  | 'Frost Defense Protection'
+  | 'Hail Netting Infrastructure';
 
 export interface LedgerEntry {
   id: string;

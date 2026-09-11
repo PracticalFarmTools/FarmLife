@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   Award,
   Building,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 export const GarageView: React.FC = () => {
@@ -18,6 +19,7 @@ export const GarageView: React.FC = () => {
     garageLevel,
     cash,
     buyMachineryDealership,
+    tradeInMachinery,
     buyMachineryAuction,
     repairMachinery,
     emergencyFix,
@@ -25,6 +27,7 @@ export const GarageView: React.FC = () => {
   } = useGameStore();
 
   const [activeSubTab, setActiveSubTab] = useState<'roster' | 'dealership' | 'auction'>('roster');
+  const [selectedTradeInId, setSelectedTradeInId] = useState<string | null>(null);
 
   const getGarageLevelName = (lvl: number) => {
     switch (lvl) {
@@ -302,62 +305,175 @@ export const GarageView: React.FC = () => {
       )}
 
       {/* DEALERSHIP SUB-TAB */}
-      {activeSubTab === 'dealership' && (
-        <div className="space-y-6">
-          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-lg">
-            <h3 className="text-lg font-bold text-stone-100 mb-1 flex items-center gap-2">
-              <Award className="w-5 h-5 text-emerald-400" />
-              <span>Official Machinery Dealership (Brand New)</span>
-            </h3>
-            <p className="text-xs text-stone-400">
-              Purchasing new equipment includes a 3-Year Dealer Warranty with 0 breakdown risk during warranty.
-            </p>
-          </div>
+      {activeSubTab === 'dealership' && (() => {
+        const selectedTradeMachine = fleet.find((m) => m.id === selectedTradeInId);
+        const selectedTradeEquity = selectedTradeMachine
+          ? Math.round(selectedTradeMachine.purchasePrice * (selectedTradeMachine.condition / 100) * 0.75)
+          : 0;
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {DEALERSHIP_CATALOG.map((item) => {
-              const canAfford = cash >= item.price;
+        return (
+          <div className="space-y-6">
+            <div className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-stone-100 mb-1 flex items-center gap-2">
+                <Award className="w-5 h-5 text-emerald-400" />
+                <span>Official Machinery Dealership (Brand New)</span>
+              </h3>
+              <p className="text-xs text-stone-400">
+                Purchasing new equipment includes a 3-Year Dealer Warranty with 0 breakdown risk during warranty.
+              </p>
+            </div>
 
-              return (
-                <div
-                  key={item.id}
-                  className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-4xl">{item.icon}</span>
-                      <span className="px-2.5 py-1 rounded bg-emerald-950 text-emerald-400 text-xs font-mono font-bold border border-emerald-800">
-                        3-Yr Warranty
-                      </span>
-                    </div>
-
-                    <h3 className="font-extrabold text-stone-100 text-base mb-1">{item.name}</h3>
-                    <p className="text-xs text-stone-400 mb-4">{item.description}</p>
-
-                    <div className="p-3 bg-stone-950 rounded-xl border border-stone-800 text-xs font-mono mb-4 flex justify-between">
-                      <span className="text-stone-400">Retail Price:</span>
-                      <span className="font-bold text-emerald-400">${item.price.toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => buyMachineryDealership(item.id)}
-                    disabled={!canAfford}
-                    className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs transition shadow flex items-center justify-center gap-1.5 ${
-                      canAfford
-                        ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-950'
-                        : 'bg-stone-800 text-stone-500 cursor-not-allowed'
-                    }`}
+            {/* Trade-In Equity Selector */}
+            <div className="bg-gradient-to-r from-stone-900 via-stone-900 to-amber-950/40 border border-amber-800/60 rounded-2xl p-5 shadow-lg">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
+                    <ArrowRightLeft className="w-4 h-4 text-amber-400" />
+                    <span>Commercial Equipment Trade-In Program</span>
+                  </h4>
+                  <p className="text-xs text-stone-400 mt-1">
+                    Trade in any owned machine from your fleet towards a brand-new implement. Dealers offer 75% condition-depreciated wholesale equity.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="text-xs font-bold text-stone-300">Fleet Trade-In:</span>
+                  <select
+                    value={selectedTradeInId || ''}
+                    onChange={(e) => setSelectedTradeInId(e.target.value || null)}
+                    className="bg-stone-950 border border-stone-700 text-stone-200 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-amber-500"
                   >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>{canAfford ? `Purchase New ($${item.price.toLocaleString()})` : 'Insufficient Cash'}</span>
+                    <option value="">-- No Trade-In Selected --</option>
+                    {fleet.map((m) => {
+                      const eq = Math.round(m.purchasePrice * (m.condition / 100) * 0.75);
+                      return (
+                        <option key={m.id} value={m.id}>
+                          {m.icon} {m.name} ({m.condition}% cond) → ${eq.toLocaleString()} Credit
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {selectedTradeMachine && (
+                <div className="mt-3 pt-3 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 font-mono">Trading:</span>
+                    <span className="font-bold text-stone-200">{selectedTradeMachine.name}</span>
+                    <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-mono font-bold">
+                      +${selectedTradeEquity.toLocaleString()} Credit
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedTradeInId(null)}
+                    className="text-stone-400 hover:text-stone-200 underline text-xs cursor-pointer"
+                  >
+                    Clear Trade-In Selection
                   </button>
                 </div>
-              );
-            })}
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {DEALERSHIP_CATALOG.map((item) => {
+                const canAffordFull = cash >= item.price;
+                const netPrice = selectedTradeMachine ? Math.max(0, item.price - selectedTradeEquity) : item.price;
+                const canAffordNet = cash >= netPrice;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="bg-stone-900 border border-stone-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-4xl">{item.icon}</span>
+                        <span className="px-2.5 py-1 rounded bg-emerald-950 text-emerald-400 text-xs font-mono font-bold border border-emerald-800">
+                          3-Yr Warranty
+                        </span>
+                      </div>
+
+                      <h3 className="font-extrabold text-stone-100 text-base mb-1">{item.name}</h3>
+                      <p className="text-xs text-stone-400 mb-4">{item.description}</p>
+
+                      <div className="p-3 bg-stone-950 rounded-xl border border-stone-800 text-xs font-mono mb-4 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-stone-400">Retail Price:</span>
+                          <span className="font-bold text-stone-200">${item.price.toLocaleString()}</span>
+                        </div>
+                        {selectedTradeMachine && (
+                          <>
+                            <div className="flex justify-between text-emerald-400">
+                              <span>Trade-In Credit:</span>
+                              <span>-${selectedTradeEquity.toLocaleString()}</span>
+                            </div>
+                            <div className="pt-1 border-t border-stone-800 flex justify-between font-bold text-amber-400">
+                              <span>Net Cash Due:</span>
+                              <span>${netPrice.toLocaleString()}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {selectedTradeMachine ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              tradeInMachinery(selectedTradeMachine.id, item.id);
+                              setSelectedTradeInId(null);
+                            }}
+                            disabled={!canAffordNet}
+                            className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs transition shadow flex items-center justify-center gap-1.5 ${
+                              canAffordNet
+                                ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 cursor-pointer'
+                                : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                            }`}
+                          >
+                            <ArrowRightLeft className="w-4 h-4" />
+                            <span>
+                              {canAffordNet
+                                ? `Trade In & Pay Net ($${netPrice.toLocaleString()})`
+                                : 'Insufficient Cash for Net'}
+                            </span>
+                          </button>
+
+                          <button
+                            onClick={() => buyMachineryDealership(item.id)}
+                            disabled={!canAffordFull}
+                            className={`w-full py-2 px-3 rounded-lg font-medium text-[11px] transition flex items-center justify-center gap-1 ${
+                              canAffordFull
+                                ? 'bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 cursor-pointer'
+                                : 'bg-stone-900 text-stone-600 cursor-not-allowed'
+                            }`}
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>Buy Outright (${item.price.toLocaleString()})</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => buyMachineryDealership(item.id)}
+                          disabled={!canAffordFull}
+                          className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs transition shadow flex items-center justify-center gap-1.5 ${
+                            canAffordFull
+                              ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-950 cursor-pointer'
+                              : 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                          }`}
+                        >
+                          <ShoppingBag className="w-4 h-4" />
+                          <span>{canAffordFull ? `Purchase New ($${item.price.toLocaleString()})` : 'Insufficient Cash'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

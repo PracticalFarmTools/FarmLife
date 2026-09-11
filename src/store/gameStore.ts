@@ -155,6 +155,9 @@ interface GameState {
   runSoilTest: (fieldId: string) => boolean;
   certifyFieldOrganic: (fieldId: string) => boolean;
   runSubsoilerPass: (fieldId: string) => boolean;
+  installFrostFans: (fieldId: string) => boolean;
+  installHailNetting: (fieldId: string) => boolean;
+  deployFrostDefensePass: (fieldId: string) => boolean;
   buyLand: () => boolean;
 
   // Financials & Banking Actions
@@ -174,6 +177,7 @@ interface GameState {
 
   // Fleet & Machinery Actions
   buyMachineryDealership: (machineId: string) => boolean;
+  tradeInMachinery: (ownedMachineId: string, newCatalogMachineId: string) => boolean;
   buyMachineryAuction: (auctionId: string) => boolean;
   repairMachinery: (machineryId: string) => boolean;
   emergencyFix: (machineryId: string) => boolean;
@@ -733,6 +737,60 @@ export const useGameStore = create<GameState>()(
           // Active disease penalty
           if (f.activeDiseases.length > 0) {
             growthMultiplier *= 0.6;
+          }
+
+          // Radiation Frost Defense & Damage
+          if (newWeather === 'Frost') {
+            if (f.hasFrostFans) {
+              newNotifications.unshift({
+                id: `frost-defended-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'info' as const,
+                title: `🌬️ Frost Fans Active: ${f.name}`,
+                message: `Orchard wind tower mixed thermal inversion layers, shielding ${crop.name} blossoms from 26°F radiation freeze!`,
+              });
+            } else {
+              growthMultiplier *= 0.2;
+              f.soilQuality = Math.max(25, f.soilQuality - 10);
+              newNotifications.unshift({
+                id: `frost-kill-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'error' as const,
+                title: `❄️ Radiation Frost Kill: ${f.name}`,
+                message: `Sub-freezing radiation frost caused severe blossom drop on ${crop.name}! Install an Orchard Wind Tower to prevent bud kill.`,
+              });
+            }
+          }
+
+          // Micro-climate Severe Hail Damage
+          if (newWeather === 'Storm') {
+            if (f.hasHailNetting) {
+              newNotifications.unshift({
+                id: `hail-defended-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'info' as const,
+                title: `🛡️ Hail Netting Shielded: ${f.name}`,
+                message: `High-tensile overhead poly canopy intercepted storm hailstones. ${crop.name} canopy protected!`,
+              });
+            } else if (Math.random() < 0.18) {
+              growthMultiplier *= 0.4;
+              f.soilQuality = Math.max(25, f.soilQuality - 10);
+              newNotifications.unshift({
+                id: `hail-damage-${Date.now()}-${f.id}`,
+                day: newDay,
+                season: newSeason,
+                year: newYear,
+                type: 'warning' as const,
+                title: `🌨️ Hailstorm Canopy Lodging: ${f.name}`,
+                message: `Severe storm dropped hailstones, bruising leaves and lodging standing ${crop.name}! Install Hail Netting to safeguard parcel.`,
+              });
+            }
           }
 
           // Overtime boost
@@ -2166,6 +2224,121 @@ export const useGameStore = create<GameState>()(
     return true;
   },
 
+  installFrostFans: (fieldId: string) => {
+    const state = get();
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || field.hasFrostFans) return false;
+    const cost = 4500;
+    if (state.cash < cost) return false;
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, hasFrostFans: true } : f)),
+      ledger: [
+        {
+          id: `frost-fan-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Installed Orchard Wind Machine Tower on ${field.name}`,
+          amount: -cost,
+          category: 'Frost Defense Protection' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `fan-installed-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `🌬️ Wind Machine Tower Installed: ${field.name}`,
+          message: `Installed propane thermal inversion propeller tower. Protects delicate crop blossoms down to 26°F against radiation frost!`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
+  installHailNetting: (fieldId: string) => {
+    const state = get();
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || field.hasHailNetting) return false;
+    const cost = 2000;
+    if (state.cash < cost) return false;
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      fields: state.fields.map((f) => (f.id === fieldId ? { ...f, hasHailNetting: true } : f)),
+      ledger: [
+        {
+          id: `hail-net-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Installed High-Tensile Poly Hail Netting Canopy on ${field.name}`,
+          amount: -cost,
+          category: 'Hail Netting Infrastructure' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `net-installed-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `🛡️ Hail Netting Installed: ${field.name}`,
+          message: `Overhead canopy anchored! Protects high-value produce and standing grain from summer hailstone lodging.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playCashRegister();
+    return true;
+  },
+
+  deployFrostDefensePass: (fieldId: string) => {
+    const state = get();
+    const field = state.fields.find((f) => f.id === fieldId);
+    if (!field || state.cash < 300) return false;
+    const cost = 300;
+    set({
+      cash: Number((state.cash - cost).toFixed(2)),
+      ledger: [
+        {
+          id: `smudge-pot-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Deployed Mobile Thermal Smudge Pots & Sprinkler Ice Encapsulation on ${field.name}`,
+          amount: -cost,
+          category: 'Frost Defense Protection' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `frost-heater-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'info' as const,
+          title: `🔥 Overnight Frost Defense Deployed: ${field.name}`,
+          message: `Ignited thermal orchard heaters to release latent heat of fusion. Crop blossoms shielded for tonight's freeze.`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
+    sound.playClick();
+    return true;
+  },
+
   runSoilTest: (fieldId: string) => {
     const state = get();
     const field = state.fields.find((f) => f.id === fieldId);
@@ -2694,6 +2867,68 @@ export const useGameStore = create<GameState>()(
     const item = DEALERSHIP_CATALOG.find((m) => m.id === machineId);
     if (!item || state.cash < item.price) return false;
     set({ cash: Number((state.cash - item.price).toFixed(2)), fleet: [...state.fleet, { id: `m-${Date.now()}`, name: item.name, category: item.category, horsepower: item.horsepower, requiredHp: item.requiredHp, condition: 100, engineHours: 0, purchasePrice: item.price, purchasedFrom: 'dealership', warrantyDaysRemaining: 1095, status: 'available', repairDaysRemaining: 0, icon: item.icon, description: item.description }] });
+    sound.playCashRegister();
+    return true;
+  },
+
+  tradeInMachinery: (ownedMachineId: string, newCatalogMachineId: string) => {
+    const state = get();
+    const ownedMachine = state.fleet.find((m) => m.id === ownedMachineId);
+    const newCatalogItem = DEALERSHIP_CATALOG.find((m) => m.id === newCatalogMachineId);
+    if (!ownedMachine || !newCatalogItem) return false;
+
+    const tradeInEquity = Math.round(ownedMachine.purchasePrice * (ownedMachine.condition / 100) * 0.75);
+    const netCashNeeded = Math.max(0, newCatalogItem.price - tradeInEquity);
+
+    if (state.cash < netCashNeeded) return false;
+
+    const remainingFleet = state.fleet.filter((m) => m.id !== ownedMachineId);
+    const newMachine: MachineryItem = {
+      id: `m-${Date.now()}`,
+      name: newCatalogItem.name,
+      category: newCatalogItem.category,
+      horsepower: newCatalogItem.horsepower,
+      requiredHp: newCatalogItem.requiredHp,
+      condition: 100,
+      engineHours: 0,
+      purchasePrice: newCatalogItem.price,
+      purchasedFrom: 'dealership',
+      warrantyDaysRemaining: 1095,
+      status: 'available',
+      repairDaysRemaining: 0,
+      icon: newCatalogItem.icon,
+      description: newCatalogItem.description,
+    };
+
+    set({
+      cash: Number((state.cash - netCashNeeded).toFixed(2)),
+      fleet: [...remainingFleet, newMachine],
+      ledger: [
+        {
+          id: `trade-in-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          description: `Trade-In: Traded ${ownedMachine.name} ($${tradeInEquity.toLocaleString()} equity) towards ${newCatalogItem.name}`,
+          amount: -netCashNeeded,
+          category: 'Machinery Trade-In' as const,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+        ...state.ledger,
+      ].slice(0, 100),
+      notifications: [
+        {
+          id: `trade-done-${Date.now()}`,
+          day: state.dayOfYear,
+          season: state.season,
+          year: state.year,
+          type: 'success' as const,
+          title: `🚜 Dealership Trade-In Complete!`,
+          message: `Credited $${tradeInEquity.toLocaleString()} for your used ${ownedMachine.name}. Net cash paid: $${netCashNeeded.toLocaleString()} for brand new ${newCatalogItem.name} with 3-year warranty!`,
+        },
+        ...state.notifications,
+      ].slice(0, 50),
+    });
     sound.playCashRegister();
     return true;
   },
